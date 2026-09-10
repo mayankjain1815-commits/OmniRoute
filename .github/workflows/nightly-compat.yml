@@ -1,15 +1,8 @@
 name: Nightly Node Compat
 
-# Plano mestre testes+CI (Eixo D2, aprovado 2026-07-04): as matrizes de compatibilidade
-# Node 24/26 custavam ~28% de CADA run do CI pesado (2 execuções completas da suíte por
-# sync da release-PR) para pegar uma classe de quebra que raramente nasce num PR típico.
-# Elas rodam aqui 1×/dia contra o tip da release ativa (mesmo alvo do nightly-release-green)
-# e continuam obrigatórias no gate de release via workflow_dispatch do ci.yml se preciso.
-# fail-fast desligado: numa quebra queremos saber TODAS as versões afetadas de uma vez.
-
 on:
   schedule:
-    - cron: "47 6 * * *" # 06:47 UTC diário — slot distinto dos demais nightlies
+    - cron: "47 6 * * *"
   workflow_dispatch:
     inputs:
       branch:
@@ -71,20 +64,10 @@ jobs:
           node-version: "26"
           cache: npm
       - uses: ./.github/actions/npm-ci-retry
-      # #8090 — this is the ONLY Node 26 build in the whole CI matrix (ci.yml pins
-      # CI_NODE_VERSION=24). It failed every nightly with the runner-reclaimed
-      # signature ("The runner has received a shutdown signal" / "The operation was
-      # canceled", no exit code) always at the same Turbopack compile phase — a
-      # classic OOM kill on the memory-constrained ubuntu-latest runner. Turbopack's
-      # native (Rust, off-V8-heap) allocation is NOT bounded by --max-old-space-size
-      # and peaks far higher than webpack on this large module graph (#6409), and is
-      # heavier still under Node 26. Use the documented webpack fallback here: it still
-      # validates that the app *builds* on Node 26 (the point of this compat job) at a
-      # much lower memory peak. Turbopack-on-Node-24 stays covered by ci.yml's build
-      # job. See docs/reference/ENVIRONMENT.md (OMNIROUTE_USE_TURBOPACK) and #6409.
       - run: npm run build
         env:
           OMNIROUTE_USE_TURBOPACK: "0"
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
   compat-tests:
     name: Node ${{ matrix.node }} Compat Tests (${{ matrix.shard }}/4)
@@ -100,19 +83,32 @@ jobs:
       JWT_SECRET: ci-nightly-secret-with-sufficient-length-for-validation
       API_KEY_SECRET: ci-nightly-api-key-secret-long
       DISABLE_SQLITE_AUTO_BACKUP: "true"
+      OMNIROUTE_USE_TURBOPACK: "0"
+      NODE_OPTIONS: "--max-old-space-size=4096"
       TEST_SHARD: ${{ matrix.shard }}/4
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.resolve-branch.outputs.target }}
           persist-credentials: false
+
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+
       - uses: ./.github/actions/npm-ci-retry
-      - run: npm run check:node-runtime
-      - run: npm run test:unit:ci:shard
+
+      - name: Verify Node runtime
+        run: npm run check:node-runtime
+
+      - name: Build project assets
+        run: npm run build
+        env:
+          OMNIROUTE_BUILD_BACKEND_ONLY: "1"
+
+      - name: Run unit test shard
+        run: npm run test:unit:ci:shard
 
   report:
     name: Open / update tracking issue on failure
