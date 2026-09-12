@@ -5,9 +5,7 @@
 import React, { act, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, it, expect } from "vitest";
-import {
-  useToolsBuilder,
-} from "../../../src/app/(dashboard)/dashboard/playground/hooks/useToolsBuilder";
+import { useToolsBuilder } from "../../../src/app/(dashboard)/dashboard/playground/hooks/useToolsBuilder";
 import type { ToolDefinition } from "../../../src/lib/playground/codeExport";
 
 // ─── Minimal hook test harness ────────────────────────────────────────────────
@@ -26,7 +24,7 @@ function mountHook<T>(useHook: () => T): {
   function HookComponent() {
     const captureRef = useRef<T>(undefined as unknown as T);
     captureRef.current = useHook();
-    // eslint-disable-next-line react-hooks/immutability -- test harness: intentionally writes to outer capture object from inside component
+
     hookRef.current = captureRef.current;
     return null;
   }
@@ -149,7 +147,10 @@ describe("useToolsBuilder", () => {
 
       act(() => {
         result.current.add(VALID_TOOL);
-        result.current.add({ type: "function", function: { name: "", parameters: {} } } as ToolDefinition);
+        result.current.add({
+          type: "function",
+          function: { name: "", parameters: {} },
+        } as ToolDefinition);
       });
 
       expect(result.current.tools).toHaveLength(1);
