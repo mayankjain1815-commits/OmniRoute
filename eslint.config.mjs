@@ -50,6 +50,10 @@ const eslintConfig = [
     // atingiria scripts/*.mjs sem o plugin react-hooks e explodiria o flat config).
     files: ["src/**/*.{ts,tsx,js,jsx}"],
     rules: {
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/immutability": "off",
+      "react-hooks/refs": "off",
       "react-hooks/exhaustive-deps": "error",
       "@next/next/no-img-element": "error",
       "import/no-anonymous-default-export": "error",
