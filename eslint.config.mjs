@@ -50,6 +50,8 @@ const eslintConfig = [
     // atingiria scripts/*.mjs sem o plugin react-hooks e explodiria o flat config).
     files: ["src/**/*.{ts,tsx,js,jsx}"],
     rules: {
+      "react-hooks/static-components": "off",
+      "react-hooks/preserve-manual-memoization": "off",
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/purity": "off",
       "react-hooks/immutability": "off",
