@@ -438,7 +438,7 @@
     "concurrently": {
       "shell-quote": "^1.9.0"
     },
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "promptfoo": {
       "js-yaml": "^5.2.2",
       "@apidevtools/json-schema-ref-parser": {
