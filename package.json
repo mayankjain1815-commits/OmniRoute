@@ -305,7 +305,7 @@
     "recharts": "^3.8.1",
     "safe-regex": "^2.1.1",
     "selfsigned": "^5.5.0",
-    "smol-toml": "1.8.0",
+    "smol-toml": "1.9.0",
     "socks": "^2.8.10",
     "sql.js": "^1.14.2",
     "sqlite-vec": "^0.1.9",
