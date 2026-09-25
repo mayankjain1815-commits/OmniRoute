@@ -1,35 +1,83 @@
 name: Nightly Property Discovery
+
 on:
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
+
 permissions:
   contents: read
   issues: write
+
+concurrency:
+  group: nightly-property-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   property-random-seed:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
+
       - run: npm ci
+
+      - name: Validate migration numbering
+        id: migrations
+        run: npm run check:migration-numbering
+
       - name: fast-check random seed (high runs)
         id: prop
-        run: FC_SEED=random FC_NUM_RUNS=2000 npm run test:property
-      - name: Open issue on failure
-        if: failure()
+        env:
+          FC_SEED: random
+          FC_NUM_RUNS: 2000
+        run: npm run test:property
+
+      - name: Open issue on property-test failure
+        if: ${{ always() && steps.migrations.outcome == 'success' && steps.prop.outcome == 'failure' }}
+        continue-on-error: true
         uses: actions/github-script@v9
         with:
           script: |
-            await github.rest.issues.create({
+            const runUrl = [
+              context.serverUrl,
+              context.repo.owner,
+              context.repo.repo,
+              "actions/runs",
+              context.runId
+            ].join("/");
+
+            let labels = [];
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: "quality-gate-finding"
+              });
+              labels = ["quality-gate-finding"];
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            const { data: issue } = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: "Nightly property-test failure (Fase 8 B)",
-              body: "fast-check found a counterexample with a random seed. Check the run logs for the reproducible seed + minimal case, then add it as a fixture.\n\nRun: " + context.serverUrl + "/" + context.repo.owner + "/" + context.repo.repo + "/actions/runs/" + context.runId,
-              labels: ["quality-gate-finding"],
+              title: `Nightly property-test failure (run ${context.runNumber})`,
+              body: [
+                "The `npm run test:property` command failed after migration numbering validation passed.",
+                "",
+                "This is not automatically a fast-check counterexample; inspect the failed step log for the actual cause.",
+                "",
+                `Run: ${runUrl}`
+              ].join("\n"),
+              labels,
             });
+
+            core.info(`Opened issue #${issue.number}`);
