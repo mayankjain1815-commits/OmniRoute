@@ -19,7 +19,7 @@ import { createErrorResponse } from "@/lib/api/errorResponse";
 import { cloudSyncActionSchema } from "@/shared/validation/schemas";
 import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
-import { isCloudEnabled, updateSettings } from "@/lib/localDb";
+import { isCloudEnabled, updateSettings } from "@/lib/db/settings";
 import { CLOUD_URL, syncToCloud } from "@/lib/cloudSync";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error";
 

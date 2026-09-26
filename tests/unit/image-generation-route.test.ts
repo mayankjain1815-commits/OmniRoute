@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { AppliedProxySink } from "../../open-sse/utils/proxyFetch.ts";
 
 const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-image-route-"));
 process.env.DATA_DIR = TEST_DATA_DIR;
@@ -560,7 +561,7 @@ test("v1 image edit POST executes Codex through the configured connection proxy"
   // Note this no longer asserts a pre-dispatch 503. runWithProxyContext fires the
   // reachability probe WITHOUT awaiting it and dispatches optimistically, so an
   // unreachable proxy no longer rejects before the request is sent.
-  const sink: { proxy: any } = { proxy: null };
+  const sink: AppliedProxySink = { proxy: null };
   const response = await runWithAppliedProxyCapture(sink, () =>
     imageEditRoute.POST(
       new Request("http://localhost/api/v1/images/edits", {
@@ -572,8 +573,9 @@ test("v1 image edit POST executes Codex through the configured connection proxy"
 
   assert.equal(response.status, 200);
   assert.ok(sink.proxy, "the configured connection proxy must be applied for the request");
-  assert.equal(sink.proxy.host, "127.0.0.1");
-  assert.equal(sink.proxy.port, 1);
+  const appliedEdit = sink.proxy as { host: string; port: number };
+  assert.equal(appliedEdit.host, "127.0.0.1");
+  assert.equal(appliedEdit.port, 1);
   assert.equal(capturedUrl, "https://chatgpt.com/backend-api/codex/responses");
 });
 
@@ -599,7 +601,7 @@ test("v1 image generation POST resolves proxy and executes with proxy context wh
     );
   };
 
-  const sink: { proxy: any } = { proxy: null };
+  const sink: AppliedProxySink = { proxy: null };
   const response = await runWithAppliedProxyCapture(sink, () =>
     imageRoute.POST(
       new Request("http://localhost/api/v1/images/generations", {
@@ -617,8 +619,9 @@ test("v1 image generation POST resolves proxy and executes with proxy context wh
   assert.equal(response.status, 200);
   assert.equal(body.data[0].b64_json, "cHJveHktaW1hZ2U=");
   assert.ok(sink.proxy, "the configured connection proxy must be applied for the request");
-  assert.equal(sink.proxy.host, "127.0.0.1");
-  assert.equal(sink.proxy.port, 1);
+  const appliedGen = sink.proxy as { host: string; port: number };
+  assert.equal(appliedGen.host, "127.0.0.1");
+  assert.equal(appliedGen.port, 1);
   assert.match(String(capturedUrl), /openai\.com/);
 });
 
