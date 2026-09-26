@@ -39,7 +39,16 @@ snap="$(ops_find_snapshot "$ID")"
 
 # Policy definition tables present in BOTH the snapshot and the live DB. GLOB
 # keeps `_` literal; we drop usage counters / logs so accounting isn't rewound.
-readarray -t tables < <(
+#
+# Collected with a `while read` loop rather than `readarray`: readarray is a
+# bash 4+ builtin, and `#!/usr/bin/env bash` resolves to the system bash —
+# 3.2 on stock macOS — where `readarray` is "command not found" and `set -e`
+# kills the script outright. `tables=()` and `+=(...)` are bash 3.1+, so the
+# array (and every `${tables[@]}` / `${#tables[@]}` use below) still works.
+tables=()
+while IFS= read -r _policy_table; do
+  [ -n "$_policy_table" ] && tables+=("$_policy_table")
+done < <(
   sqlite3 "$snap/storage.sqlite" \
     "SELECT name FROM sqlite_master WHERE type='table' AND name GLOB 'api_key*' \
        AND name NOT GLOB '*counter*' AND name NOT GLOB '*_log*' ORDER BY name;"
