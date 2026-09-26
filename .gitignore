@@ -17,7 +17,11 @@ _tasks/
 .logs/**
 .tests/**
 .coverage/**
-coverage/
+# Anchored for the same reason as /cloud/ below: a bare `coverage/` matched
+# src/app/api/agent-skills/coverage/ at any depth, untracking a documented route
+# that the CLI (bin/cli/api-commands/agent-skills.mjs) and the OpenAPI spec
+# still reference.
+/coverage/
 .dist/**
 .next/**
 .build/**
