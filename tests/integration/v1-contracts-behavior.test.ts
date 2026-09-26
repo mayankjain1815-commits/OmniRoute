@@ -3,6 +3,37 @@ import assert from "node:assert/strict";
 
 const BASE_URL = "http://localhost:20128";
 
+let apiKeyPromise: Promise<string> | null = null;
+
+/**
+ * Build an authorized `Request` for the `/v1` model-listing routes.
+ *
+ * The CI job exports `INITIAL_PASSWORD`, which marks the instance as initialized
+ * and therefore switches the v1 catalog routes from the pre-initialization
+ * bootstrap path to enforced API-key auth (`getModelCatalogAuthRejection` ->
+ * `isAuthRequired`, `src/app/api/v1/models/catalogRequest.ts:12`). These tests
+ * called the handlers with no credentials, so they asserted 200 on a route that
+ * correctly answers 401 — they passed on a workstation (no `INITIAL_PASSWORD`,
+ * auth skipped) and failed in CI with `401 !== 200` on all four listing contracts.
+ *
+ * These tests assert the SHAPE of the authorized response, so they authenticate
+ * the way a real client does. Minting a real key (rather than stubbing the
+ * validator) keeps them on the same code path an SDK takes, including
+ * `validateApiKey`'s hash lookup. Minted once and reused: `createApiKey` writes a
+ * row, and the route only reads it.
+ */
+async function authorizedRequest(url: string): Promise<Request> {
+  if (!apiKeyPromise) {
+    apiKeyPromise = (async () => {
+      const apiKeysDb = await import("../../src/lib/db/apiKeys.ts");
+      const created = await apiKeysDb.createApiKey("v1-contracts", "1234567890abcdef");
+      return created.key;
+    })();
+  }
+  const apiKey = await apiKeyPromise;
+  return new Request(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+}
+
 test("contract: /api/v1 OPTIONS exposes CORS and allowed methods", async () => {
   const { OPTIONS } = await import("../../src/app/api/v1/route.ts");
   const response = await OPTIONS();
@@ -29,8 +60,8 @@ test("contract: /api/v1 and /api/v1/models return consistent model IDs", async (
   ]);
 
   const [v1Response, v1ModelsResponse] = await Promise.all([
-    getV1(new Request(`${BASE_URL}/api/v1`, { method: "GET" })),
-    getV1Models(new Request(`${BASE_URL}/api/v1/models`, { method: "GET" })),
+    getV1(await authorizedRequest(`${BASE_URL}/api/v1`)),
+    getV1Models(await authorizedRequest(`${BASE_URL}/api/v1/models`)),
   ]);
 
   assert.equal(v1Response.status, 200);
@@ -52,7 +83,7 @@ test("contract: /api/v1 and /api/v1/models return consistent model IDs", async (
 
 test("contract: /api/v1/models returns OpenAI-compatible model shape", async () => {
   const { GET: getV1Models } = await import("../../src/app/api/v1/models/route.ts");
-  const response = await getV1Models(new Request(`${BASE_URL}/api/v1/models`, { method: "GET" }));
+  const response = await getV1Models(await authorizedRequest(`${BASE_URL}/api/v1/models`));
 
   assert.equal(response.status, 200);
   const body = (await response.json()) as any;
@@ -72,7 +103,7 @@ test("contract: /api/v1/models returns OpenAI-compatible model shape", async () 
 
 test("contract: /api/v1/embeddings GET returns embedding model listing shape", async () => {
   const { GET: getEmbeddings } = await import("../../src/app/api/v1/embeddings/route.ts");
-  const response = await getEmbeddings();
+  const response = await getEmbeddings(await authorizedRequest(`${BASE_URL}/api/v1/embeddings`));
 
   assert.equal(response.status, 200);
   const body = (await response.json()) as any;
@@ -91,7 +122,9 @@ test("contract: /api/v1/embeddings GET returns embedding model listing shape", a
 
 test("contract: /api/v1/images/generations GET returns image model listing shape", async () => {
   const { GET: getImageModels } = await import("../../src/app/api/v1/images/generations/route.ts");
-  const response = await getImageModels();
+  const response = await getImageModels(
+    await authorizedRequest(`${BASE_URL}/api/v1/images/generations`)
+  );
 
   assert.equal(response.status, 200);
   const body = (await response.json()) as any;
