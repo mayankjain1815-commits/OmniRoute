@@ -1250,6 +1250,78 @@ test("chatCore restores prefixed Claude passthrough tool names in upstream respo
   assert.equal(payload.content[0].name, "Bash");
 });
 
+test("chatCore restores prefixed Claude passthrough tool names in streamed responses", async () => {
+  const { result } = await invokeChatCore({
+    provider: "claude",
+    model: "claude-sonnet-4-6",
+    endpoint: "/v1/messages",
+    accept: "text/event-stream",
+    credentials: { apiKey: "claude-key", providerSpecificData: {} },
+    body: {
+      model: "claude-sonnet-4-6",
+      stream: true,
+      messages: [{ role: "user", content: [{ type: "text", text: "run bash" }] }],
+      tools: [
+        {
+          name: "Bash",
+          description: "Execute bash",
+          input_schema: { type: "object" },
+        },
+      ],
+    },
+    responseFormat: "claude",
+    responseFactory() {
+      return new Response(
+        [
+          "event: message_start",
+          `data: ${JSON.stringify({
+            type: "message_start",
+            message: {
+              id: "msg_tool_stream",
+              type: "message",
+              role: "assistant",
+              model: "claude-sonnet-4-6",
+              usage: { input_tokens: 4, output_tokens: 0 },
+            },
+          })}`,
+          "",
+          "event: content_block_start",
+          `data: ${JSON.stringify({
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "tool_use", id: "toolu_1", name: "proxy_Bash", input: {} },
+          })}`,
+          "",
+          "event: content_block_delta",
+          `data: ${JSON.stringify({
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "input_json_delta", partial_json: JSON.stringify({ command: "ls" }) },
+          })}`,
+          "",
+          "event: message_delta",
+          `data: ${JSON.stringify({
+            type: "message_delta",
+            delta: { stop_reason: "tool_use" },
+            usage: { output_tokens: 3 },
+          })}`,
+          "",
+          "event: message_stop",
+          `data: ${JSON.stringify({ type: "message_stop" })}`,
+          "",
+        ].join("\n"),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+    },
+  });
+
+  assert.equal(result.success, true);
+  const stream = await result.response.text();
+  assert.match(stream, /"name":"Bash"/);
+  assert.equal(stream.includes("proxy_Bash"), false);
+  assert.match(stream, /event: message_stop/);
+});
+
 test("chatCore strips unsupported reasoning params and caps provider token fields", async () => {
   const { call } = await invokeChatCore({
     provider: "openai",

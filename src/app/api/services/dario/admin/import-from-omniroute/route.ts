@@ -29,6 +29,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -40,6 +41,11 @@ import { createErrorResponse } from "@/lib/api/errorResponse";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error";
 
 const ALIAS_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_\-.]{0,63}$/;
+
+const ImportBodySchema = z.object({
+  connectionId: z.string().min(1).max(200),
+  alias: z.string().max(200).optional(),
+});
 
 function safeAliasFromSource(email: string | null | undefined, connectionId: string): string {
   const base = (email || connectionId || "omniroute").toLowerCase();
@@ -89,11 +95,13 @@ export async function POST(request: Request): Promise<Response> {
     return createErrorResponse({ status: 400, message: "Invalid JSON body" });
   }
 
-  const b = (body || {}) as Record<string, unknown>;
-  const connectionId = typeof b.connectionId === "string" ? b.connectionId : null;
-  if (!connectionId) {
+  const parsedBody = ImportBodySchema.safeParse(body);
+  if (!parsedBody.success) {
     return createErrorResponse({ status: 400, message: "connectionId is required" });
   }
+
+  const b = parsedBody.data;
+  const connectionId = b.connectionId;
 
   const conn = (await getProviderConnectionById(connectionId)) as Record<string, unknown> | null;
   if (!conn) {

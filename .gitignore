@@ -17,7 +17,11 @@ _tasks/
 .logs/**
 .tests/**
 .coverage/**
-coverage/
+# Anchored for the same reason as /cloud/ below: a bare `coverage/` matched
+# src/app/api/agent-skills/coverage/ at any depth, untracking a documented route
+# that the CLI (bin/cli/api-commands/agent-skills.mjs) and the OpenAPI spec
+# still reference.
+/coverage/
 .dist/**
 .next/**
 .build/**
@@ -107,7 +111,10 @@ open-sse/test/*
 test-results/
 playwright-report/
 blob-report/
-cloud/
+# Anchored to the repo root on purpose. A bare `cloud/` matched src/app/api/cloud/
+# at any depth, which silently untracked the whole /api/cloud/* route family while
+# the authz allowlist, the docs and the tests all still referenced it.
+/cloud/
 .tmp/
 
 # Security Analysis (standalone project with own git)

@@ -260,7 +260,12 @@ test("response.completed normalizes usage when lifecycle echoes are stripped", a
 
   const completed = JSON.parse(completedLine.slice(5).trim());
   assert.equal("instructions" in completed.response, false);
-  assert.equal("tools" in completed.response, false);
+  // `tools` is deliberately NOT stripped on the terminal snapshot: #8990 fixed a
+  // regression where response.completed lost the tool list, leaving Codex CLI with
+  // zero tools. It is still stripped on response.created / response.in_progress.
+  // See tests/unit/stream-strip-responses-lifecycle-echo.test.ts for the unit-level
+  // contract; this asserts the behavior survives the full stream transform.
+  assert.deepEqual(completed.response.tools, [{ type: "function", name: "echoed_tool" }]);
   assert.equal(completed.response.usage.total_tokens, 91);
 });
 
