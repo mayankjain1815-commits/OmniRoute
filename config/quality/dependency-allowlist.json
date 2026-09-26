@@ -129,6 +129,7 @@
     "undici",
     "update-notifier",
     "uuid",
+    "vite",
     "vitest",
     "wait-on",
     "wreq-js",
