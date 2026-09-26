@@ -72,19 +72,64 @@ export function FlowCanvas({
   // Bumped on every onInit so queued fitView calls can be invalidated when
   // a new ReactFlow instance mounts (e.g. via fitKey change).
   const generationRef = useRef(0);
+  // Handle for the deferred fitView queued by onInit, so it can be cancelled.
+  // See the onInit comment — without this the timer outlives the component.
+  const refitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whether this canvas is still mounted. ReactFlow's `onInit` fires from an
+  // internal viewport/observer callback, NOT synchronously during render, so it
+  // can land after this component has already unmounted — in which case the
+  // unmount cleanup below has already run and there is no chance to cancel
+  // whatever timer onInit is about to create. This flag is checked at FIRE time
+  // to close that window; `refitTimeoutRef` alone cannot.
+  const mountedRef = useRef(false);
 
-  const onInit = useCallback((instance: ReactFlowInstance) => {
-    const generation = ++generationRef.current;
-    rfInstance.current = instance;
-    // Defer fitView until ReactFlow has measured its viewport, but guard
-    // against the instance being replaced (generation mismatch) before the
-    // timer fires — see Bug #4 in the audit report.
-    setTimeout(() => {
-      if (generationRef.current === generation) {
-        instance.fitView(FIT_VIEW_OPTIONS);
-      }
-    }, REFIT_DELAY_MS);
+  const clearPendingRefit = useCallback(() => {
+    if (refitTimeoutRef.current !== null) {
+      clearTimeout(refitTimeoutRef.current);
+      refitTimeoutRef.current = null;
+    }
   }, []);
+
+  const onInit = useCallback(
+    (instance: ReactFlowInstance) => {
+      const generation = ++generationRef.current;
+      rfInstance.current = instance;
+      // Defer fitView until ReactFlow has measured its viewport, but guard
+      // against the instance being replaced (generation mismatch) before the
+      // timer fires — see Bug #4 in the audit report.
+      //
+      // The generation guard only rejects a REPLACED instance. It does not stop
+      // the timer from firing after the component is GONE: navigating away or
+      // switching studio tabs unmounts FlowCanvas within the 60ms window, and the
+      // timer then calls fitView() on a dead ReactFlow instance, which walks
+      // state that no longer has a mounted root behind it. That is a
+      // setState-after-unmount leak, and it is observable outside tests too — the
+      // stray call can throw from React internals on an unrelated page. Keep the
+      // handle and cancel it on unmount and on a fresh init.
+      clearPendingRefit();
+      refitTimeoutRef.current = setTimeout(() => {
+        refitTimeoutRef.current = null;
+        // Both guards are needed: `mountedRef` covers the unmounted case (including
+        // a late onInit that arrived after the cleanup ran), the generation check
+        // covers the replaced case.
+        if (mountedRef.current && generationRef.current === generation) {
+          instance.fitView(FIT_VIEW_OPTIONS);
+        }
+      }, REFIT_DELAY_MS);
+    },
+    [clearPendingRefit]
+  );
+
+  // Mark mounted/unmounted and cancel the deferred refit when the canvas goes
+  // away, so nothing is left holding a reference to a torn-down ReactFlow
+  // instance.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearPendingRefit();
+    };
+  }, [clearPendingRefit]);
 
   useEffect(() => {
     const el = containerRef.current;
