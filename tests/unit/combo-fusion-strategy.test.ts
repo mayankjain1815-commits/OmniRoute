@@ -310,6 +310,106 @@ test("fusion: never dispatches hidden panel members or a hidden explicit judge",
   assert.deepEqual(seen, ["p/a", "p/b", "p/a"]);
 });
 
+/**
+ * The tool-bearing path is the sharpest half of the hidden-judge bug: a request
+ * carrying `tools` skips panel synthesis entirely and dispatches straight to the
+ * judge (#6771), so a hidden judge was the ONLY model that ever ran — with no
+ * panel fan-out to dilute it. Guarded separately from the panel-synthesis case
+ * above because the two code paths resolve the judge independently.
+ */
+test("fusion: never dispatches a hidden explicit judge for a tool-bearing request", async () => {
+  modelsDb.mergeModelCompatOverride("p", "tool-hidden-judge", { isHidden: true });
+  const seen: string[] = [];
+
+  const res = await handleComboChat({
+    body: {
+      messages: [{ role: "user", content: "Q" }],
+      tools: [{ type: "function", function: { name: "do_thing" } }],
+    },
+    combo: fusionCombo(["p/a", "p/b"], { judgeModel: "p/tool-hidden-judge" }),
+    handleSingleModel: async (_body: Body, model: string) => {
+      seen.push(model);
+      return okResponse(`answer-${model}`);
+    },
+    log,
+    settings: {},
+    allCombos: [],
+  });
+
+  assert.equal(res.status, 200);
+  // Exactly one dispatch: the tool-bearing short-circuit. It must be a visible
+  // panel member, never the hidden judge.
+  assert.equal(seen.length, 1);
+  assert.ok(
+    seen[0] !== "p/tool-hidden-judge",
+    `hidden judge was dispatched for a tool-bearing request: ${seen.join(", ")}`
+  );
+});
+
+/**
+ * Counterpart to the two tests above: the hidden filter must not be so eager that
+ * it discards a VISIBLE explicit judge. An operator pinning a judge is expressing
+ * intent, and `judgeModel` is honored even when the judge is not in the panel
+ * (#6455) — dropping it silently would swap in a different model and change the
+ * answer.
+ */
+test("fusion: still honors a visible explicit judge that is not a panel member", async () => {
+  const seen: string[] = [];
+
+  const res = await handleComboChat({
+    body: { messages: [{ role: "user", content: "Q" }] },
+    combo: fusionCombo(["p/a", "p/b"], { judgeModel: "p/visible-judge" }),
+    handleSingleModel: async (_body: Body, model: string) => {
+      seen.push(model);
+      return okResponse(`answer-${model}`);
+    },
+    log,
+    settings: {},
+    allCombos: [],
+  });
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(seen, ["p/a", "p/b", "p/visible-judge"]);
+});
+
+/**
+ * Lock on the panel-target plumbing itself: the resolved combo target must reach
+ * `handleSingleModel` intact, not just its model string. A structured combo entry
+ * can pin a provider (or account) that differs from the model-id prefix — that pin
+ * is the operator's explicit instruction, and losing it silently re-routes the
+ * request to whatever provider the prefix happens to name.
+ */
+test("fusion: hands the full resolved target to handleSingleModel, not just its model string", async () => {
+  const seen: Array<Record<string, unknown>> = [];
+
+  const res = await handleComboChat({
+    body: { messages: [{ role: "user", content: "Q" }] },
+    combo: {
+      name: "resolved-target-passthrough",
+      strategy: "fusion",
+      models: [{ model: "vendor/pinned", providerId: "nvidia" }],
+      config: {},
+    },
+    handleSingleModel: async (_body: Body, model: string, target) => {
+      seen.push({ model, ...(target as Record<string, unknown> | undefined) });
+      return okResponse("ok");
+    },
+    log,
+    settings: {},
+    allCombos: [],
+  });
+
+  assert.equal(res.status, 200);
+  assert.ok(seen.length >= 1, "expected at least one dispatch");
+  for (const call of seen) {
+    assert.equal(
+      (call as { providerId?: string }).providerId,
+      "nvidia",
+      `resolved target lost its providerId — dispatch would fall back to the model prefix: ${JSON.stringify(call)}`
+    );
+  }
+});
+
 test("fusion: returns 503 when the whole panel fails", async () => {
   const handleSingleModel = async () => errResponse(500);
   const res = await handleComboChat({
