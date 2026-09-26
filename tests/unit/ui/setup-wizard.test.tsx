@@ -38,6 +38,43 @@ const mockTarget = {
   riskNoticeKey: "providers.riskNotice.oauth",
 };
 
+// `serverState` is a REQUIRED prop of SetupWizard (AgentBridgeServerState, not
+// `| undefined`), and SetupWizard dereferences it on every render:
+//
+//   const certTrusted = agentState?.cert_trusted ?? serverState.certTrusted ?? false;
+//                                                                          ^^^^^^^^^^^^^^
+//
+// These tests never passed it, so every render threw
+// "TypeError: Cannot read properties of undefined (reading 'certTrusted')" and
+// the assertions in all three tests below never actually ran. It went unnoticed
+// because React.createElement does not type-check its props object, so omitting
+// a required prop compiled cleanly.
+//
+// This is a test defect, not a product one: production always supplies it, and
+// the page client dereferences data.serverState.certTrusted itself
+// (AgentBridgePageClient.tsx:303) before it ever renders a SetupWizard, so a
+// missing serverState would crash the page first.
+//
+// `running` is derived from the same boolean as the sibling `serverRunning`
+// prop so the two cannot disagree, matching the single call site
+// (AgentBridgePageClient.tsx:316) where both come from data.serverState.
+function makeServerState(running: boolean) {
+  return {
+    running,
+    port: 8080,
+    certTrusted: false,
+    upstreamCa: null,
+    lastStartedAt: null,
+    activeConns: 0,
+    interceptedCount: 0,
+    dnsConfigured: false,
+    orphanedStateDetected: false,
+    hasCachedPassword: false,
+    needsSudoPassword: false,
+    isWin: false,
+  };
+}
+
 describe("SetupWizard", { timeout: 30000 }, () => {
   beforeEach(() => {
     (
@@ -52,9 +89,8 @@ describe("SetupWizard", { timeout: 30000 }, () => {
   });
 
   it("renders step 1 (verify) on open", async () => {
-    const { SetupWizard } = await import(
-      "../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/SetupWizard"
-    );
+    const { SetupWizard } =
+      await import("../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/SetupWizard");
 
     const container = makeContainer();
     await act(async () => {
@@ -64,6 +100,7 @@ describe("SetupWizard", { timeout: 30000 }, () => {
           target: mockTarget,
           agentState: undefined,
           serverRunning: false,
+          serverState: makeServerState(false),
           onClose: vi.fn(),
           onDnsToggle: vi.fn(),
         })
@@ -76,9 +113,8 @@ describe("SetupWizard", { timeout: 30000 }, () => {
   }, 30000);
 
   it("navigates to step 2 when Next clicked", async () => {
-    const { SetupWizard } = await import(
-      "../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/SetupWizard"
-    );
+    const { SetupWizard } =
+      await import("../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/SetupWizard");
 
     const container = makeContainer();
     await act(async () => {
@@ -88,6 +124,7 @@ describe("SetupWizard", { timeout: 30000 }, () => {
           target: mockTarget,
           agentState: undefined,
           serverRunning: true,
+          serverState: makeServerState(true),
           onClose: vi.fn(),
           onDnsToggle: vi.fn(),
         })
@@ -107,9 +144,8 @@ describe("SetupWizard", { timeout: 30000 }, () => {
   }, 30000);
 
   it("calls onDnsToggle when enabling DNS in step 2", async () => {
-    const { SetupWizard } = await import(
-      "../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/SetupWizard"
-    );
+    const { SetupWizard } =
+      await import("../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/SetupWizard");
 
     const onDnsToggle = vi.fn().mockResolvedValue(undefined);
     const container = makeContainer();
@@ -128,6 +164,7 @@ describe("SetupWizard", { timeout: 30000 }, () => {
             last_error: null,
           },
           serverRunning: true,
+          serverState: makeServerState(true),
           onClose: vi.fn(),
           onDnsToggle,
         })
@@ -155,9 +192,8 @@ describe("SetupWizard", { timeout: 30000 }, () => {
   }, 30000);
 
   it("calls onClose when Cancel clicked on step 1", async () => {
-    const { SetupWizard } = await import(
-      "../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/SetupWizard"
-    );
+    const { SetupWizard } =
+      await import("../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/SetupWizard");
 
     const onClose = vi.fn();
     const container = makeContainer();
@@ -169,6 +205,7 @@ describe("SetupWizard", { timeout: 30000 }, () => {
           target: mockTarget,
           agentState: undefined,
           serverRunning: false,
+          serverState: makeServerState(false),
           onClose,
           onDnsToggle: vi.fn(),
         })

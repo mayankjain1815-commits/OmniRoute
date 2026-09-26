@@ -30,7 +30,13 @@ function makeContainer(): HTMLElement {
 
 const PANEL_PATH = "@/app/(dashboard)/dashboard/providers/[id]/components/CoolingConnectionsPanel";
 
-describe("CoolingConnectionsPanel", () => {
+// Timeout raised to 30000ms to handle the initial module transform overhead.
+// Each test below dynamically imports the panel, which drags in the providers
+// surface, and the vitest UI job runs 198 test files in parallel — so that
+// import competes for the transform worker with every other file and can
+// exceed vitest's 5000ms default. Same convention as the sibling smoke tests
+// (combos-page-smoke.test.tsx, evals-tab-smoke.test.tsx).
+describe("CoolingConnectionsPanel", { timeout: 30000 }, () => {
   beforeEach(() => {
     (
       globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
