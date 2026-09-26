@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
-import { memoryManager } from "@/lib/memory/manager";
+// Import the barrel, NOT ./manager: src/lib/memory/index.ts registers the
+// sqlite backend with memoryManager as a module side effect, while ./manager on
+// its own does not. Importing the submodule made this route depend on some
+// unrelated module having loaded the barrel first — in production
+// src/instrumentation-node.ts does it via initMemoryBackends(), so the endpoint
+// happened to work, but any context where instrumentation had not run got a
+// 500 "[MemoryManager] Primary backend \"sqlite\" not registered".
+// Sibling route src/app/api/memory/route.ts already imports the barrel.
+import { memoryManager } from "@/lib/memory";
 import { validateBody, isValidationFailure } from "@/shared/validation/helpers";
 import { MemoryUpdatePutSchema } from "@/shared/schemas/memory";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error.ts";

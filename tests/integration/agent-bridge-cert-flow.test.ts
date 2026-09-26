@@ -19,7 +19,8 @@ process.env.DISABLE_SQLITE_AUTO_BACKUP = "true";
 
 const certRoute = await import("../../src/app/api/tools/agent-bridge/cert/route.ts");
 const downloadRoute = await import("../../src/app/api/tools/agent-bridge/cert/download/route.ts");
-const regenerateRoute = await import("../../src/app/api/tools/agent-bridge/cert/regenerate/route.ts");
+const regenerateRoute =
+  await import("../../src/app/api/tools/agent-bridge/cert/regenerate/route.ts");
 
 function certDir() {
   return path.join(TEST_DATA_DIR, "mitm");
@@ -39,7 +40,11 @@ test.beforeEach(() => {
 });
 
 test.after(() => {
-  try { fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true }); } catch { /* noop */ }
+  try {
+    fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+  } catch {
+    /* noop */
+  }
 });
 
 // ── GET /cert ─────────────────────────────────────────────────────────────
@@ -47,7 +52,7 @@ test.after(() => {
 test("GET /cert: returns exists:false when no cert file", async () => {
   const res = await certRoute.GET();
   assert.equal(res.status, 200);
-  const body = await res.json() as Record<string, unknown>;
+  const body = (await res.json()) as Record<string, unknown>;
   assert.equal(body.exists, false);
   assert.equal(body.trusted, false);
   assert.equal(body.path, null);
@@ -59,7 +64,7 @@ test("GET /cert: returns exists:true when cert file present", async () => {
 
   const res = await certRoute.GET();
   assert.equal(res.status, 200);
-  const body = await res.json() as Record<string, unknown>;
+  const body = (await res.json()) as Record<string, unknown>;
   assert.equal(body.exists, true);
   // trusted may be false in test env (no system store)
   assert.ok(typeof body.trusted === "boolean");
@@ -75,15 +80,22 @@ test("GET /cert: error response does not leak stack trace", async () => {
 // ── POST /cert (trust — mocked OS) ────────────────────────────────────────
 
 test("POST /cert: returns 404 when no cert file", async () => {
+  // A non-empty sudoPassword is required to make this deterministic.
+  // isMitmSudoPasswordRequired() is host-dependent: it returns false on Windows,
+  // as root, and where sudo is NOPASSWD (the ubuntu CI runner), but TRUE on a
+  // developer Mac with a normal sudo setup — where the handler would answer 400
+  // "Missing sudoPassword" before it ever looked for the certificate. Passing a
+  // password pins the gate off on every host. Safe: with no cert on disk the
+  // handler returns 404 before any privileged call is attempted.
   const res = await certRoute.POST(
     new Request("http://localhost/", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sudoPassword: "" }),
+      body: JSON.stringify({ sudoPassword: "not-a-real-password" }),
     })
   );
   assert.equal(res.status, 404);
-  const body = await res.json() as Record<string, unknown>;
+  const body = (await res.json()) as Record<string, unknown>;
   const errMsg = (body.error as Record<string, unknown>)?.message as string;
   assert.ok(!errMsg.includes("at /"), "stack trace leaked in 404 error message");
 });
@@ -106,7 +118,7 @@ MIIBpDCCAQ2gAwIBAgIUFakeMITMCertForTestingOnlyXX==
 
   // In test env: installCert may throw because the PEM is fake; we accept
   // either 200 (mocked) or 500 (real OS failure) — NOT a 500 with stack trace
-  const body = await res.json() as Record<string, unknown>;
+  const body = (await res.json()) as Record<string, unknown>;
   const errMsg = (body.error as Record<string, unknown>)?.message as string | undefined;
   if (errMsg) {
     assert.ok(!errMsg.includes("at /"), "stack trace leaked in POST /cert error");
@@ -118,7 +130,7 @@ MIIBpDCCAQ2gAwIBAgIUFakeMITMCertForTestingOnlyXX==
 test("GET /cert/download: 404 when no cert file", async () => {
   const res = await downloadRoute.GET();
   assert.equal(res.status, 404);
-  const body = await res.json() as Record<string, unknown>;
+  const body = (await res.json()) as Record<string, unknown>;
   const errMsg = (body.error as Record<string, unknown>)?.message as string;
   assert.ok(!errMsg.includes("at /"), "stack trace leaked in download 404");
 });
