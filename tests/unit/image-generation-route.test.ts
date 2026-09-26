@@ -17,6 +17,7 @@ const providerImageRoute =
   await import("../../src/app/api/v1/providers/[provider]/images/generations/route.ts");
 const imageEditRoute = await import("../../src/app/api/v1/images/edits/route.ts");
 const v1ModelsCatalog = await import("../../src/app/api/v1/models/catalog.ts");
+const { runWithAppliedProxyCapture } = await import("../../open-sse/utils/proxyFetch.ts");
 
 const originalFetch = globalThis.fetch;
 
@@ -169,45 +170,66 @@ test("v1 image models GET exposes current Codex image models and hides inactive 
 });
 
 test("v1 image generation POST accepts promptless requests for image-only models", async () => {
-  await seedConnection("topaz", { apiKey: "topaz-key" });
+  // The `image_url` input path goes through fetchRemoteImage, whose public-only
+  // guard mode performs a LIVE dns.promises.lookup as the DNS-rebinding defense
+  // (GHSA-cmhj-wh2f-9cgx). With globalThis.fetch stubbed there is nothing real to
+  // resolve, so the lookup stalls on the sandbox/CI resolver and then fails the
+  // host, turning this into a ~30s 502.
+  //
+  // Use the documented private-URL opt-in for the duration of this test: it
+  // switches the guard to "none", which skips the DNS pre-check while keeping
+  // parseOutboundUrl's protocol + embedded-credential checks unconditional.
+  // Restored immediately after so no other case runs with a relaxed guard.
+  const originalGuardEnv = process.env.OMNIROUTE_ALLOW_PRIVATE_PROVIDER_URLS;
+  process.env.OMNIROUTE_ALLOW_PRIVATE_PROVIDER_URLS = "true";
 
-  globalThis.fetch = async (url, options: RequestInit = {}) => {
-    const stringUrl = String(url);
-    if (stringUrl === "https://example.com/topaz-input.png") {
-      return new Response(new Uint8Array([1, 2, 3]), {
-        status: 200,
-        headers: { "content-type": "image/png" },
-      });
+  try {
+    await seedConnection("topaz", { apiKey: "topaz-key" });
+
+    globalThis.fetch = async (url, options: RequestInit = {}) => {
+      const stringUrl = String(url);
+      if (stringUrl === "https://example.com/topaz-input.png") {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { "content-type": "image/png" },
+        });
+      }
+
+      if (stringUrl === "https://api.topazlabs.com/image/v1/enhance") {
+        const formData = options.body as FormData;
+        assert.ok(formData.get("image") instanceof File);
+        return new Response(new Uint8Array([7, 7, 7]), {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${stringUrl}`);
+    };
+
+    const response = await imageRoute.POST(
+      new Request("http://localhost/api/v1/images/generations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "topaz/topaz-enhance",
+          image_url: "https://example.com/topaz-input.png",
+          size: "2048x2048",
+          response_format: "b64_json",
+        }),
+      })
+    );
+    const body = (await response.json()) as ImageResponseBody;
+
+    assert.equal(response.status, 200);
+    assert.equal(body.data[0].b64_json, "BwcH");
+  } finally {
+    if (originalGuardEnv === undefined) {
+      delete process.env.OMNIROUTE_ALLOW_PRIVATE_PROVIDER_URLS;
+    } else {
+      process.env.OMNIROUTE_ALLOW_PRIVATE_PROVIDER_URLS = originalGuardEnv;
     }
-
-    if (stringUrl === "https://api.topazlabs.com/image/v1/enhance") {
-      const formData = options.body as FormData;
-      assert.ok(formData.get("image") instanceof File);
-      return new Response(new Uint8Array([7, 7, 7]), {
-        status: 200,
-        headers: { "content-type": "image/jpeg" },
-      });
-    }
-
-    throw new Error(`Unexpected URL: ${stringUrl}`);
-  };
-
-  const response = await imageRoute.POST(
-    new Request("http://localhost/api/v1/images/generations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "topaz/topaz-enhance",
-        image_url: "https://example.com/topaz-input.png",
-        size: "2048x2048",
-        response_format: "b64_json",
-      }),
-    })
-  );
-  const body = (await response.json()) as ImageResponseBody;
-
-  assert.equal(response.status, 200);
-  assert.equal(body.data[0].b64_json, "BwcH");
+  }
 });
 
 test("v1 image generation POST still requires prompts for text-input models", async () => {
@@ -510,20 +532,49 @@ test("v1 image edit POST executes Codex through the configured connection proxy"
     host: "127.0.0.1",
     port: 1,
   });
-  globalThis.fetch = async () => {
-    throw new Error("Direct fetch must not run when the configured proxy is unreachable");
+
+  let capturedUrl: string | null = null;
+  globalThis.fetch = async (url) => {
+    capturedUrl = String(url);
+    const event = {
+      type: "response.output_item.done",
+      item: {
+        type: "image_generation_call",
+        id: "ig_proxy_1",
+        status: "completed",
+        revised_prompt: "edited via proxy",
+        result: "cHJveHktZWRpdA==",
+      },
+    };
+    return new Response(`data: ${JSON.stringify(event)}\n\ndata: [DONE]\n\n`, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
   };
 
-  const response = await imageEditRoute.POST(
-    new Request("http://localhost/api/v1/images/edits", {
-      method: "POST",
-      body: createCodexEditForm("edit this"),
-    })
+  // The proxy must be the one the executor actually egressed through, not merely
+  // one that was configured. runWithAppliedProxyCapture is the supported probe
+  // for that (#5217) — a stubbed globalThis.fetch replaces the patched fetch, so
+  // it cannot observe the proxy itself.
+  //
+  // Note this no longer asserts a pre-dispatch 503. runWithProxyContext fires the
+  // reachability probe WITHOUT awaiting it and dispatches optimistically, so an
+  // unreachable proxy no longer rejects before the request is sent.
+  const sink: { proxy: any } = { proxy: null };
+  const response = await runWithAppliedProxyCapture(sink, () =>
+    imageEditRoute.POST(
+      new Request("http://localhost/api/v1/images/edits", {
+        method: "POST",
+        body: createCodexEditForm("edit this"),
+      })
+    )
   );
-  const body = (await response.json()) as ErrorResponseBody;
 
-  assert.equal(response.status, 503);
-  assert.match(body.error.message, /proxy/i);
+  assert.equal(response.status, 200);
+  assert.ok(sink.proxy, "the configured connection proxy must be applied for the request");
+  assert.equal(sink.proxy.host, "127.0.0.1");
+  assert.equal(sink.proxy.port, 1);
+  assert.equal(capturedUrl, "https://chatgpt.com/backend-api/codex/responses");
 });
 
 test("v1 image generation POST resolves proxy and executes with proxy context when credentials.connectionId exists", async () => {
@@ -534,27 +585,41 @@ test("v1 image generation POST resolves proxy and executes with proxy context wh
   await settingsDb.setProxyForLevel("key", String(connection.id), {
     type: "http",
     host: "127.0.0.1",
-    port: 1, // intentionally unreachable — proves proxy path was taken
+    port: 1,
   });
 
-  globalThis.fetch = async () => {
-    throw new Error("fetch should not be called — proxy fast-fail should trigger first");
+  let capturedUrl: string | null = null;
+  globalThis.fetch = async (url) => {
+    capturedUrl = String(url);
+    return new Response(
+      JSON.stringify({
+        data: [{ b64_json: "cHJveHktaW1hZ2U=", revised_prompt: "proxy test image" }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
   };
 
-  const response = await imageRoute.POST(
-    new Request("http://localhost/api/v1/images/generations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "openai/gpt-image-2",
-        prompt: "proxy test image",
-      }),
-    })
+  const sink: { proxy: any } = { proxy: null };
+  const response = await runWithAppliedProxyCapture(sink, () =>
+    imageRoute.POST(
+      new Request("http://localhost/api/v1/images/generations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "openai/gpt-image-2",
+          prompt: "proxy test image",
+        }),
+      })
+    )
   );
+  const body = (await response.json()) as ImageResponseBody;
 
-  assert.equal(response.status, 503);
-  const body = (await response.json()) as ErrorResponseBody;
-  assert.match(body.error.message, /unreachable/i);
+  assert.equal(response.status, 200);
+  assert.equal(body.data[0].b64_json, "cHJveHktaW1hZ2U=");
+  assert.ok(sink.proxy, "the configured connection proxy must be applied for the request");
+  assert.equal(sink.proxy.host, "127.0.0.1");
+  assert.equal(sink.proxy.port, 1);
+  assert.match(String(capturedUrl), /openai\.com/);
 });
 
 test("v1 image generation POST executes directly when proxy resolution fails gracefully", async () => {
