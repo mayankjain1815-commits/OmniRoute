@@ -45,6 +45,24 @@
       "risk": "low",
       "reviewAt": "v4.0.0"
     },
+    "@img/sharp-libvips-darwin-arm64": {
+      "license": "LGPL-3.0-or-later",
+      "justification": "Same rationale as @img/sharp-libvips-linux-x64 — Apple Silicon (darwin/arm64) build of the same prebuilt libvips shared library, an os-scoped optional dep of the 'sharp' package. Dynamically linked .dylib distributed by the sharp project; OmniRoute neither modifies nor statically links it. Registered for platform consistency: check:licenses scans the INSTALLED tree rather than the lockfile, so without this entry every macOS developer and any macOS build fails the gate even though the Linux CI job is green.",
+      "risk": "low",
+      "reviewAt": "v4.0.0"
+    },
+    "@img/sharp-libvips-darwin-x64": {
+      "license": "LGPL-3.0-or-later",
+      "justification": "Same rationale as @img/sharp-libvips-darwin-arm64 — Intel macOS (darwin/x64) build of the same prebuilt libvips shared library. Registered for the same platform-consistency reason.",
+      "risk": "low",
+      "reviewAt": "v4.0.0"
+    },
+    "elkjs": {
+      "license": "EPL-2.0",
+      "justification": "elkjs is a graph-layout engine that mermaid declares as an optional dependency, pulled in transitively as a production dep of mermaid (used by OmniRoute for diagram rendering). EPL-2.0 is a weak, file-level copyleft — the same category as the MPL-2.0 exception already registered for lightningcss: only modifications to the EPL-licensed files themselves would have to be redistributed under EPL, and OmniRoute consumes the published package unmodified. Unlike AGPL-3.0 there is no network-use clause, so hosting OmniRoute triggers no additional obligation. The OmniRoute codebase remains MIT.",
+      "risk": "low",
+      "reviewAt": "v4.0.0"
+    },
     "lightningcss": {
       "license": "MPL-2.0",
       "justification": "MPL-2.0 is a weak, file-level copyleft: only modifications to MPL-licensed files must be released under MPL. OmniRoute does not modify lightningcss source. It is pulled in transitively as a runtime dep of vite (via monaco-editor, a production dep). MPL-2.0 is explicitly compatible with Apache/MIT combinations per the Mozilla FAQ and is routinely used in Node.js production stacks. The OmniRoute codebase remains MIT.",
