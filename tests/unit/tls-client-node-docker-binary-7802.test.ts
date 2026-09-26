@@ -11,10 +11,26 @@ test("Dockerfile's --ignore-scripts npm ci is compensated for tls-client-node's 
   const dockerfile = readFileSync(join(ROOT, "Dockerfile"), "utf8");
   const postinstall = readFileSync(join(ROOT, "scripts/build/postinstall.mjs"), "utf8");
 
+  // The install line may carry extra leading flags — `--include=optional` is
+  // there on purpose, because the platform-native optionalDependencies this
+  // test's whole premise depends on (tls-client-node's .so/.dylib/.dll,
+  // better-sqlite3's binding) are skipped when npm omits optional deps. The
+  // assertion that matters for #7802 is that the four hardening flags are
+  // present and in order, so tolerate the leading flags rather than pinning the
+  // exact command line.
   assert.match(
     dockerfile,
-    /npm ci --no-audit --no-fund --legacy-peer-deps --ignore-scripts/,
+    /npm ci (?:\S+ )*--no-audit --no-fund --legacy-peer-deps --ignore-scripts/,
     "expected the builder stage to install with --ignore-scripts (precondition of #7802)"
+  );
+
+  // --include=optional must stay: without it `npm ci --ignore-scripts` drops the
+  // native optional deps entirely and the compensating rebuild/postinstall steps
+  // below have nothing to repair.
+  assert.match(
+    dockerfile,
+    /npm ci --include=optional /,
+    "expected npm ci to keep optionalDependencies (native platform binaries)"
   );
 
   assert.match(
