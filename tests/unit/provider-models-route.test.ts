@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isAntigravityBootstrapCall } from "../helpers/antigravityDiscovery.ts";
 
 const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-provider-model-routes-"));
 process.env.DATA_DIR = TEST_DATA_DIR;
@@ -931,20 +932,8 @@ test("provider models route retries Antigravity discovery endpoints before retur
 
   globalThis.fetch = async (url, init = {}) => {
     const urlString = String(url);
-    // After PR #2219, the discovery flow calls loadCodeAssist and then
-    // onboardUser as a project bootstrap before it ever reaches a discovery
-    // endpoint. Treat BOTH bootstrap calls as non-fatal failures so the test
-    // exercises the discovery retry path.
-    //
-    // Both matter. onboardUser in particular: it used to fall through to the
-    // shared mock below and consume its one-shot 503 budget, so the FIRST
-    // `:fetchAvailableModels` URL then answered 200 and discovery returned
-    // early. The retry was never exercised, and the test failed asserting a
-    // two-URL sequence that the route had no reason to produce.
-    if (
-      urlString.includes("/v1internal:loadCodeAssist") ||
-      urlString.includes("/v1internal:onboardUser")
-    ) {
+    // Bootstrap calls must be non-fatal so the retry below is exercised.
+    if (isAntigravityBootstrapCall(urlString)) {
       return new Response("nope", { status: 503 });
     }
     seenUrls.push(urlString);
