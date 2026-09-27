@@ -20,7 +20,7 @@
  * (the owner asked for it to stay off-by-default pending live validation). With the flag
  * off, buildHeaders keeps the historical forward-only behavior.
  */
-import { test } from "node:test";
+import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { forwardOpencodeClientHeaders } from "../../open-sse/utils/opencodeHeaders.ts";
 import { OpencodeExecutor } from "../../open-sse/executors/opencode.ts";
@@ -28,6 +28,38 @@ import { OpencodeExecutor } from "../../open-sse/executors/opencode.ts";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CLI_DEFAULTS = { userAgent: "opencode-cli/1.0.0", client: "cli", project: "default" };
+
+// Every value the executor consults when synthesizing CLI identity. The tests
+// below assert the DOCUMENTED defaults, so all of these have to be absent —
+// otherwise a developer's shell (or a CI job that exports one) silently
+// changes what the executor produces and the default-asserting tests fail for
+// reasons that have nothing to do with the code under test. The per-test
+// withEnv() overrides nest on top of this clean state.
+const SYNTHESIS_ENV_KEYS = [
+  "OPENCODE_SYNTHESIZE_CLI_HEADERS",
+  "OPENCODE_USER_AGENT",
+  "OPENCODE_CLIENT",
+  "OPENCODE_PROJECT",
+  // The executor also probes a provider-scoped `<PROVIDER>_USER_AGENT` first.
+  "OPENCODE_GO_USER_AGENT",
+];
+
+const savedSynthesisEnv = new Map<string, string | undefined>();
+
+beforeEach(() => {
+  for (const key of SYNTHESIS_ENV_KEYS) {
+    if (!savedSynthesisEnv.has(key)) savedSynthesisEnv.set(key, process.env[key]);
+    delete process.env[key];
+  }
+});
+
+afterEach(() => {
+  for (const [key, value] of savedSynthesisEnv) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  savedSynthesisEnv.clear();
+});
 
 function withEnv(key: string, value: string | undefined, fn: () => void) {
   const saved = process.env[key];

@@ -216,10 +216,21 @@ describe("model capability overrides", () => {
     insert.run("legacy", "collision", "max_token", "64000", "2026-01-01 00:00:00");
     insert.run("legacy", "collision", "max_output_tokens", "128000", "2026-02-01 00:00:00");
 
-    const migration = fs.readFileSync(
-      path.resolve("src/lib/db/migrations/135_migrate_model_capability_max_token.sql"),
-      "utf8"
+    // Discover the migration by its descriptive slug, not by its number prefix.
+    // It was 135 and is now 136 (135_auto_restart_adopted.sql claimed the slot);
+    // a hardcoded number re-breaks this test on every renumbering. The slug after
+    // the prefix is stable, and asserting exactly one match means a future rename
+    // fails loudly here instead of silently skipping the migration.
+    const MIGRATIONS_DIR = path.resolve("src/lib/db/migrations");
+    const candidates = fs
+      .readdirSync(MIGRATIONS_DIR)
+      .filter((f) => /_migrate_model_capability_max_token\.sql$/.test(f));
+    assert.deepEqual(
+      candidates.length,
+      1,
+      `expected exactly 1 model-capability max_token migration, found: ${candidates.join(", ")}`
     );
+    const migration = fs.readFileSync(path.join(MIGRATIONS_DIR, candidates[0]), "utf8");
     db.exec(migration);
     db.exec(migration);
 

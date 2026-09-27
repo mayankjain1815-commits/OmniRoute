@@ -15,7 +15,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getProviderConnections } from "@/lib/localDb";
+import { getProviderConnections } from "@/lib/db/providers";
 import { getModelAliases } from "@/models";
 import { extractApiKey, isValidApiKey } from "@/sse/services/auth";
 import { createErrorResponse } from "@/lib/api/errorResponse";

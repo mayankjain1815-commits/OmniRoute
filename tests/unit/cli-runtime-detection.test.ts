@@ -8,8 +8,21 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
-const { getCliRuntimeStatus, getKnownToolPaths, CLI_TOOL_IDS } =
+// #3321 (loginShellPath.ts) makes getLookupEnv() merge the user's LOGIN-SHELL
+// PATH into the lookup env on darwin, because a GUI/Electron launch inherits a
+// truncated PATH. That enrichment has to be off for the "binary is absent"
+// assertions below to mean anything: with it on, `process.env.PATH = ""` is
+// silently replaced by the operator's real login PATH (16 dirs on this machine),
+// so the test stops measuring "is `cn` locatable" and starts measuring "is
+// `cn` installed on this box". Point $SHELL at a binary that cannot be
+// executed so getLoginShellPath() takes its documented failure path and
+// returns null. Set before the first detection call, because
+// getCachedLoginShellPath() memoizes per process.
+process.env.SHELL = "/nonexistent/omniroute-test-login-shell";
+
+const { getCliRuntimeStatus, getKnownToolPaths, getLookupEnv, CLI_TOOL_IDS } =
   await import("../../src/shared/services/cliRuntime.ts");
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -236,16 +249,56 @@ describe("Continue CLI detection", () => {
   it("should not report Continue as installed when the cn binary is absent", async () => {
     const previousPath = process.env.PATH;
     const previousOverride = process.env.CLI_CONTINUE_BIN;
-    process.env.PATH = "";
+
+    // A PATH made of (a) a private EMPTY directory and (b) the directory that
+    // actually holds `sh`. The empty dir is what makes "absent" true; the
+    // `sh` dir is needed because locateCommand() runs `sh -c 'command -v cn'`,
+    // and Node resolves the executable against the CHILD env — with a PATH that
+    // contains no shell at all the spawn fails with ENOENT and the lookup
+    // returns "not found" for the wrong reason, which would make this test
+    // pass even if detection were completely broken.
+    //
+    // The previous `process.env.PATH = ""` was doubly wrong: POSIX treats an
+    // empty PATH as ".", so it also searched the CWD, and #3321 replaced it
+    // with the operator's real login PATH anyway (see the SHELL override at the
+    // top of this file).
+    const shellDir = path.dirname(
+      execFileSync("sh", ["-c", "command -v sh"], { encoding: "utf8" }).trim()
+    );
+    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-empty-path-"));
+    process.env.PATH = [emptyDir, shellDir].join(path.delimiter);
     delete process.env.CLI_CONTINUE_BIN;
 
     try {
+      // Precondition: the isolation above is actually in force. If #3321's
+      // login-shell enrichment ever starts running again, getLookupEnv() would
+      // silently widen PATH back to the operator's real login PATH and every
+      // assertion below would degrade into "is `cn` installed on this box".
+      assert.equal(
+        getLookupEnv().PATH,
+        process.env.PATH,
+        "getLookupEnv() must not widen PATH — the login-shell enrichment is supposed to be disabled here"
+      );
+
       const result = await getCliRuntimeStatus("continue");
       assert.equal(result.installed, false);
       assert.equal(result.runnable, false);
       assert.equal(result.reason, "not_found");
       assert.equal(result.requiresBinary, true);
+
+      // Guard the guard: with a real `cn` placed in the searched directory the
+      // very same lookup must report it installed. Without this, the assertions
+      // above would also hold against a lookup that can never succeed.
+      const decoy = path.join(emptyDir, "cn");
+      fs.writeFileSync(decoy, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      const withBinary = await getCliRuntimeStatus("continue");
+      assert.equal(
+        withBinary.installed,
+        true,
+        "a `cn` on PATH must be detected — otherwise the absent-binary assertions above prove nothing"
+      );
     } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true });
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
       if (previousOverride === undefined) delete process.env.CLI_CONTINUE_BIN;

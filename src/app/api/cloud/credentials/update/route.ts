@@ -16,7 +16,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getProviderConnections, updateProviderConnection } from "@/lib/localDb";
+import { getProviderConnections, updateProviderConnection } from "@/lib/db/providers";
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
 import { createErrorResponse } from "@/lib/api/errorResponse";
 import { cloudCredentialUpdateSchema } from "@/shared/validation/schemas";

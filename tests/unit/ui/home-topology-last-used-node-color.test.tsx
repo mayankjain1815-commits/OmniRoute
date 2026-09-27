@@ -15,6 +15,18 @@ import { FLOW_EDGE_COLORS } from "../../../src/shared/components/flow/edgeStyles
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
+// ProviderTopology calls useRouter() unconditionally at the top of the component
+// (ProviderTopology.tsx:332) even though it only uses the router inside the
+// node-click handler that pushes to /dashboard/providers/:id. Outside a real app
+// router that hook throws its "invariant expected app router to be mounted"
+// invariant, which aborted all three tests below during render — before any of
+// the border/dot assertions could run. The component is correct here: it lives
+// under the app router in production, so the app-router context is the missing
+// piece, not the component. This mirrors the same mock in 16 sibling UI tests
+// (e.g. agent-bridge-page.test.tsx).
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
+}));
 vi.mock("@/shared/components/ProviderIcon", () => ({
   default: () => <span data-testid="icon" />,
 }));
@@ -48,9 +60,8 @@ vi.mock("@xyflow/react", () => ({
   Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
 }));
 
-const ProviderTopology = (
-  await import("../../../src/app/(dashboard)/home/ProviderTopology")
-).default;
+const ProviderTopology = (await import("../../../src/app/(dashboard)/home/ProviderTopology"))
+  .default;
 
 // jsdom normalises inline hex colours to `rgb(...)`, so compare in that space.
 const rgb = (hex: string) => {

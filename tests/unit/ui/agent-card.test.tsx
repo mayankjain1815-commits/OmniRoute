@@ -52,6 +52,43 @@ const mockTarget = {
   viability: "supported" as const,
 };
 
+// `serverState` is a REQUIRED prop of AgentCard (AgentBridgeServerState, not
+// `| undefined`), and AgentCard dereferences it on every render:
+//
+//   const certTrusted = agentState?.cert_trusted ?? serverState.certTrusted ?? false;
+//                                                                          ^^^^^^^^^^^^^^
+//
+// These tests never passed it, so every render threw
+// "TypeTypeError: Cannot read properties of undefined (reading 'certTrusted')"
+// and the assertions in all three tests below never actually ran. It went
+// unnoticed because React.createElement does not type-check its props object,
+// so omitting a required prop compiled cleanly.
+//
+// This is a test defect, not a product one: production always supplies it, and
+// the page client dereferences data.serverState.certTrusted itself
+// (AgentBridgePageClient.tsx:303) before it ever renders an AgentCard, so a
+// missing serverState would crash the page first.
+//
+// `running` is derived from the same boolean as the sibling `serverRunning`
+// prop so the two cannot disagree, matching the single call site
+// (AgentBridgePageClient.tsx:293) where both come from data.serverState.
+function makeServerState(running: boolean) {
+  return {
+    running,
+    port: 8080,
+    certTrusted: false,
+    upstreamCa: null,
+    lastStartedAt: null,
+    activeConns: 0,
+    interceptedCount: 0,
+    dnsConfigured: false,
+    orphanedStateDetected: false,
+    hasCachedPassword: false,
+    needsSudoPassword: false,
+    isWin: false,
+  };
+}
+
 describe("AgentCard", { timeout: 30000 }, () => {
   beforeEach(() => {
     (
@@ -66,9 +103,8 @@ describe("AgentCard", { timeout: 30000 }, () => {
   });
 
   it("renders agent name and hosts", async () => {
-    const { AgentCard } = await import(
-      "../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/AgentCard"
-    );
+    const { AgentCard } =
+      await import("../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/AgentCard");
 
     const container = makeContainer();
     await act(async () => {
@@ -78,6 +114,7 @@ describe("AgentCard", { timeout: 30000 }, () => {
           target: mockTarget,
           agentState: undefined,
           serverRunning: false,
+          serverState: makeServerState(false),
           mappings: [],
           onDnsToggle: vi.fn(),
           onMappingsSave: vi.fn(),
@@ -90,9 +127,8 @@ describe("AgentCard", { timeout: 30000 }, () => {
   }, 30000);
 
   it("expands on click and shows DNS toggle", async () => {
-    const { AgentCard } = await import(
-      "../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/AgentCard"
-    );
+    const { AgentCard } =
+      await import("../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/AgentCard");
 
     const container = makeContainer();
     await act(async () => {
@@ -102,6 +138,7 @@ describe("AgentCard", { timeout: 30000 }, () => {
           target: mockTarget,
           agentState: undefined,
           serverRunning: true,
+          serverState: makeServerState(true),
           mappings: [],
           onDnsToggle: vi.fn(),
           onMappingsSave: vi.fn(),
@@ -120,9 +157,8 @@ describe("AgentCard", { timeout: 30000 }, () => {
   }, 30000);
 
   it("calls onDnsToggle when DNS button clicked", async () => {
-    const { AgentCard } = await import(
-      "../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/AgentCard"
-    );
+    const { AgentCard } =
+      await import("../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/AgentCard");
 
     // Simulate that the per-agent RiskNoticeModal (Fix4 M5) has already been
     // accepted for this agent — otherwise the DNS click opens the modal first
@@ -148,6 +184,7 @@ describe("AgentCard", { timeout: 30000 }, () => {
             last_error: null,
           },
           serverRunning: true,
+          serverState: makeServerState(true),
           mappings: [],
           onDnsToggle,
           onMappingsSave: vi.fn(),
@@ -175,9 +212,8 @@ describe("AgentCard", { timeout: 30000 }, () => {
   }, 30000);
 
   it("opens wizard when setup wizard button clicked", async () => {
-    const { AgentCard } = await import(
-      "../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/AgentCard"
-    );
+    const { AgentCard } =
+      await import("../../../src/app/(dashboard)/dashboard/tools/agent-bridge/components/AgentCard");
 
     const container = makeContainer();
     await act(async () => {
@@ -187,6 +223,7 @@ describe("AgentCard", { timeout: 30000 }, () => {
           target: mockTarget,
           agentState: undefined,
           serverRunning: true,
+          serverState: makeServerState(true),
           mappings: [],
           onDnsToggle: vi.fn(),
           onMappingsSave: vi.fn(),

@@ -18,13 +18,17 @@ const modulePath = path.join(process.cwd(), "src/shared/utils/machineId.ts");
 /**
  * Force Strategies 1-3 to fail so the fallback chain reaches os.hostname().
  * - Strategy 1 (REG.exe): override SystemRoot so the exe path doesn't exist.
- * - Strategy 2 (ioreg): only runs on darwin — skipped on Linux/Windows.
+ * - Strategy 2 (ioreg): stub execSync to throw for the ioreg probe. This step
+ *   used to be a no-op on Linux CI ("ioreg only runs on darwin"), but on a
+ *   real macOS box ioreg SUCCEEDS and returns the IOPlatformUUID, so the chain
+ *   stopped at Strategy 2 and the mocked os.hostname() was never reached — two
+ *   tests in this file passed on CI and failed on macOS for that reason alone.
  * - Strategy 3 (Linux files): stub readFileSync to throw for machine-id paths.
  *
  * Returns a restore function.
  * NOTE: call syncBuiltinESMExports() AFTER this so ESM imports see the updates.
  */
-function disableWindowsRegistryStrategy(): () => void {
+function disablePlatformStrategiesBeforeHostname(): () => void {
   const origSysRoot = process.env.SystemRoot;
   const origWindir = process.env.windir;
   process.env.SystemRoot = "Z:\\NonExistent";
@@ -38,6 +42,16 @@ function disableWindowsRegistryStrategy(): () => void {
     return origReadFileSync(filePath, encoding);
   };
 
+  // Only the ioreg probe is intercepted; every other execSync (notably Strategy
+  // 5's `hostname`) must still reach the real implementation.
+  const origExecSync = childProcess.execSync;
+  childProcess.execSync = ((command: string, ...rest: unknown[]) => {
+    if (typeof command === "string" && command.trimStart().startsWith("ioreg")) {
+      throw new Error("ioreg: mocked unavailable");
+    }
+    return (origExecSync as (...args: unknown[]) => unknown)(command, ...rest);
+  }) as typeof childProcess.execSync;
+
   return () => {
     if (origSysRoot !== undefined) {
       process.env.SystemRoot = origSysRoot;
@@ -50,6 +64,7 @@ function disableWindowsRegistryStrategy(): () => void {
       delete process.env.windir;
     }
     fs.readFileSync = origReadFileSync;
+    childProcess.execSync = origExecSync;
   };
 }
 
@@ -82,7 +97,7 @@ test("getRawMachineId caches result after first call", async () => {
 });
 
 test("getRawMachineId with mocked os.hostname(): caches, does not re-call", async () => {
-  const restoreEnv = disableWindowsRegistryStrategy();
+  const restoreEnv = disablePlatformStrategiesBeforeHostname();
   syncBuiltinESMExports();
   const mockHostname = mock.method(os, "hostname", () => "sisyphus-test-pc");
 
@@ -106,7 +121,7 @@ test("getRawMachineId with mocked os.hostname(): caches, does not re-call", asyn
 });
 
 test("resetMachineIdCache clears cached value", async () => {
-  const restoreEnv = disableWindowsRegistryStrategy();
+  const restoreEnv = disablePlatformStrategiesBeforeHostname();
   syncBuiltinESMExports();
   const mockHostname = mock.method(os, "hostname", () => "first-pc");
 
@@ -136,7 +151,7 @@ test("resetMachineIdCache clears cached value", async () => {
 // ===========================================================================
 
 test("os.hostname() (Strategy 4) is tried before execSync hostname (Strategy 5)", async () => {
-  const restoreEnv = disableWindowsRegistryStrategy();
+  const restoreEnv = disablePlatformStrategiesBeforeHostname();
   syncBuiltinESMExports();
   const mockHostname = mock.method(os, "hostname", () => "preferred-hostname");
 
@@ -157,7 +172,7 @@ test("os.hostname() (Strategy 4) is tried before execSync hostname (Strategy 5)"
 });
 
 test("Strategy 5 (execSync hostname) is used when os.hostname() fails", async () => {
-  const restoreEnv = disableWindowsRegistryStrategy();
+  const restoreEnv = disablePlatformStrategiesBeforeHostname();
   syncBuiltinESMExports();
   const mockHostname = mock.method(os, "hostname", () => {
     throw new Error("E_UNAVAIL");
