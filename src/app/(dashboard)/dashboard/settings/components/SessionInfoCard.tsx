@@ -73,12 +73,19 @@ export default function SessionInfoCard() {
   }, []);
 
   const handleLogout = async () => {
+    // A hard navigation is required here, and `router.push()` would be wrong: the
+    // session cookie is already cleared server-side, so an RSC push could still be
+    // served from the client cache and briefly render authenticated state. This is
+    // the same deliberate full-page reload the previous `location.href = "/"`
+    // performed; `replace` keeps the equivalent behaviour (and drops the
+    // logged-out settings page from history so Back cannot return to it) without
+    // the relative-destination `href` assignment the Next lint rule rejects.
     try {
       await fetch("/api/auth/logout", { method: "POST" });
       sessionStorage.removeItem("omniroute_login_time");
-      window.location.href = "/";
+      window.location.replace("/");
     } catch {
-      window.location.href = "/";
+      window.location.replace("/");
     }
   };
 
