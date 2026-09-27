@@ -126,6 +126,12 @@ export const PACK_ARTIFACT_ROOT_ALLOWED_EXACT_PATHS: string[] = [
   // #7802: imported by scripts/build/postinstall.mjs to repair tls-client-node's
   // native binary (chatgpt-web/claude-web/grok-web/lmarena/perplexity-web transport).
   "scripts/build/fixTlsClientNodeBinary.mjs",
+  // #7265: imported by scripts/build/postinstall.mjs and invoked unconditionally
+  // (postinstall.mjs:444) to patch playwright-core's platform checks so the
+  // server boots on Android/Termux. Without it in the tarball `npm install`
+  // succeeds and the first launch dies with "Unsupported platform: android" —
+  // so this is REQUIRED, not merely allowed.
+  "scripts/build/fixPlaywrightAndroid.mjs",
   // #5227: imported at runtime by bin/cli/commands/serve.mjs (heap auto-calibration).
   "scripts/build/runtime-env.mjs",
   "scripts/build/sync-env.mjs",
@@ -194,6 +200,10 @@ export const PACK_ARTIFACT_REQUIRED_PATHS: string[] = [
   "scripts/build/postinstallSupport.mjs",
   "scripts/build/colocateOptionals.mjs",
   "scripts/build/fixTlsClientNodeBinary.mjs",
+  // #7265: postinstall.mjs imports and unconditionally runs this (line 444) to
+  // keep the server bootable on Android/Termux. Required so its absence from a
+  // future tarball is a loud failure instead of a runtime crash.
+  "scripts/build/fixPlaywrightAndroid.mjs",
   "scripts/build/runtime-env.mjs",
   "src/shared/utils/nodeRuntimeSupport.ts",
 ];
