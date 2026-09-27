@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { Button } from "@/shared/components";
 import MediaProviderHeader from "../../components/MediaProviderHeader";
 import MediaProviderKindNav from "../../components/MediaProviderKindNav";
@@ -86,6 +87,7 @@ export default function MediaProviderPageClient({
   hasFree,
   freeNote,
 }: MediaProviderPageClientProps) {
+  const router = useRouter();
   const t = useTranslations("media");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,7 +149,7 @@ export default function MediaProviderPageClient({
             size="sm"
             icon="add"
             onClick={() => {
-              window.location.href = `/dashboard/providers/${providerId}`;
+              router.push(`/dashboard/providers/${providerId}`);
             }}
           >
             {t("addConnection")}
@@ -164,7 +166,7 @@ export default function MediaProviderPageClient({
               size="sm"
               icon="add"
               onClick={() => {
-                window.location.href = `/dashboard/providers/${providerId}`;
+                router.push(`/dashboard/providers/${providerId}`);
               }}
             >
               {t("addConnection")}

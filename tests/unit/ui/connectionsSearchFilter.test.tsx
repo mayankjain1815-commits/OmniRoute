@@ -112,7 +112,12 @@ const fetchStub = vi.fn().mockResolvedValue({
 } as any);
 vi.stubGlobal("fetch", fetchStub);
 
-describe("useProviderConnections — accountSearch (#7937)", () => {
+// The hook module arrives via a cold dynamic import; on a loaded CI runner (199
+// workers) that exceeded vitest 5000ms default and aborted the first test mid-
+// act(), which in turn aborted its pending render/flush inside the second test
+// and made that test read a pre-update snapshot. Same convention as the sibling
+// smoke tests (combos-page-smoke, evals-tab-smoke, CoolingConnectionsPanel).
+describe("useProviderConnections — accountSearch (#7937)", { timeout: 30000 }, () => {
   let container: HTMLElement;
   let root: ReturnType<typeof createRoot>;
 
@@ -134,9 +139,8 @@ describe("useProviderConnections — accountSearch (#7937)", () => {
   });
 
   it("defaults accountSearch to empty string and exposes setAccountSearch", async () => {
-    const { useProviderConnections } = await import(
-      "@/app/(dashboard)/dashboard/providers/[id]/hooks/useProviderConnections"
-    );
+    const { useProviderConnections } =
+      await import("@/app/(dashboard)/dashboard/providers/[id]/hooks/useProviderConnections");
 
     type HookResult = ReturnType<typeof useProviderConnections>;
     let result: HookResult | null = null;
@@ -158,9 +162,8 @@ describe("useProviderConnections — accountSearch (#7937)", () => {
   });
 
   it("resets page to 0 when the search query changes", async () => {
-    const { useProviderConnections } = await import(
-      "@/app/(dashboard)/dashboard/providers/[id]/hooks/useProviderConnections"
-    );
+    const { useProviderConnections } =
+      await import("@/app/(dashboard)/dashboard/providers/[id]/hooks/useProviderConnections");
 
     type HookResult = ReturnType<typeof useProviderConnections>;
     let result: HookResult | null = null;

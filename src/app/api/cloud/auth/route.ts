@@ -20,7 +20,11 @@ import { getModelAliases } from "@/models";
 import { extractApiKey, isValidApiKey } from "@/sse/services/auth";
 import { createErrorResponse } from "@/lib/api/errorResponse";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error";
-import { maskSecret } from "../../models/alias/route";
+// One level up, not two: `src/app/api/models/alias/route.ts` is the dashboard's
+// alias route and does not export `maskSecret`. Only the cloud-nested module does,
+// so the extra `../` resolved to a module with no such export and failed the
+// Turbopack build (and `tsc`) with "Export maskSecret doesn't exist in target module".
+import { maskSecret } from "../models/alias/route";
 
 type ConnectionRow = Record<string, unknown>;
 
