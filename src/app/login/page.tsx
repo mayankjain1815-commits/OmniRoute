@@ -270,14 +270,25 @@ export default function LoginPage() {
             </form>
             {oidcEnabled && (
               <div className="mt-4">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full h-11 text-sm font-medium"
-                  onClick={() => (window.location.href = "/api/auth/oidc/login")}
-                >
-                  {t("continueWithOidc") || "Continue with OIDC"}
-                </Button>
+                {/*
+                  A real GET form, not `window.location.href` and not
+                  `useRouter().push()`. `/api/auth/oidc/login` is a GET handler
+                  that answers with a 302 to the identity provider, so it needs a
+                  genuine browser navigation — `useRouter().push()` would issue an
+                  RSC fetch against an API route and never reach the IdP. The form
+                  is the honest expression of that: it navigates for real, and it
+                  also works with JS disabled. Mirrors the password path's form
+                  just above.
+                */}
+                <form action="/api/auth/oidc/login" method="get">
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    className="w-full h-11 text-sm font-medium"
+                  >
+                    {t("continueWithOidc") || "Continue with OIDC"}
+                  </Button>
+                </form>
               </div>
             )}
 

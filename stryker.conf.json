@@ -39,9 +39,7 @@
   "incremental": true,
   "incrementalFile": "reports/mutation/stryker-incremental.json",
   "testRunner": "tap",
-  "plugins": [
-    "@stryker-mutator/tap-runner"
-  ],
+  "plugins": ["@stryker-mutator/tap-runner"],
   "tap": {
     "testFiles": [
       "tests/unit/7993-noauth-proxy-routing.test.ts",
@@ -99,12 +97,14 @@
       "tests/unit/chatcore-executor-helpers.test.ts",
       "tests/unit/chatcore-executor-proxy.test.ts",
       "tests/unit/chatcore-extracted-modules-3821.test.ts",
+      "tests/unit/chatcore-headers-nonstreamsse-branches.test.ts",
       "tests/unit/chatcore-headers.test.ts",
       "tests/unit/chatcore-imports-cleanly.test.ts",
       "tests/unit/chatcore-log-truncation.test.ts",
       "tests/unit/chatcore-memory-extraction.test.ts",
       "tests/unit/chatcore-memory-skills-injection.test.ts",
       "tests/unit/chatcore-non-streaming-sse.test.ts",
+      "tests/unit/chatcore-passthrough-tool-names-branches.test.ts",
       "tests/unit/chatcore-passthrough-tool-names.test.ts",
       "tests/unit/chatcore-request-format.test.ts",
       "tests/unit/chatcore-sanitization.test.ts",
@@ -424,11 +424,7 @@
     ".worktrees",
     ".stryker-tmp"
   ],
-  "reporters": [
-    "progress",
-    "html",
-    "json"
-  ],
+  "reporters": ["progress", "html", "json"],
   "htmlReporter": {
     "fileName": "reports/mutation/mutation.html"
   },
