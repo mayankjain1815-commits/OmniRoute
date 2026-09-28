@@ -1,0 +1,48 @@
+{
+  "basePath": "../..",
+  "packageManager": "npm",
+  "incremental": false,
+  "testRunner": "tap",
+  "plugins": ["@stryker-mutator/tap-runner"],
+  "tap": {
+    "testFiles": [
+      "tests/unit/chatcore-headers-nonstreamsse-branches.test.ts",
+      "tests/unit/chatcore-headers.test.ts",
+      "tests/unit/no-memory-header.test.ts",
+      "tests/unit/strip-reasoning-header.test.ts",
+      "tests/unit/chatcore-non-streaming-sse.test.ts",
+      "tests/unit/non-streaming-sse-terminal-typescan-4459.test.ts",
+      "tests/unit/chatcore-passthrough-tool-names-branches.test.ts",
+      "tests/unit/chatcore-passthrough-tool-names.test.ts"
+    ],
+    "nodeArgs": [
+      "--import",
+      "tsx",
+      "--import",
+      "./open-sse/utils/setupPolyfill.ts",
+      "--import",
+      "./tests/_setup/isolateDataDir.ts",
+      "--test-reporter=tap",
+      "-r",
+      "{{hookFile}}",
+      "{{testFile}}"
+    ]
+  },
+  "mutate": [
+    "open-sse/handlers/chatCore/headers.ts",
+    "open-sse/handlers/chatCore/nonStreamingSse.ts",
+    "open-sse/handlers/chatCore/passthroughToolNames.ts"
+  ],
+  "ignorePatterns": [".next", "dist", ".build", "coverage", "reports", "docs/i18n", ".stryker-tmp"],
+  "reporters": ["json"],
+  "jsonReporter": { "fileName": "reports/mutation-probe/mutation.json" },
+  "coverageAnalysis": "perTest",
+  "timeoutMS": 60000,
+  "timeoutFactor": 2.5,
+  "concurrency": 4,
+  "disableTypeChecks": true,
+  "checkers": [],
+  "thresholds": { "high": 70, "low": 50, "break": null },
+  "tempDirName": ".stryker-tmp-probe",
+  "cleanTempDir": true
+}

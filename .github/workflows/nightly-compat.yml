@@ -67,7 +67,14 @@ jobs:
       - run: npm run build
         env:
           OMNIROUTE_USE_TURBOPACK: "0"
-          NODE_OPTIONS: "--max-old-space-size=4096"
+          # Node 26's webpack run OOM'd at the 4096 MB this job used to pin
+          # (Mark-Compact 3904.6 (4165.1) MB -> "Ineffective mark-compacts near
+          # heap limit"). build.yml already provisions 12288 MB for this same
+          # `npm run build`, so 4096 was simply under-provisioned for a webpack
+          # (non-Turbopack) compile. Match the canonical build workflow rather
+          # than inventing a value; the test job below keeps 4096, which is
+          # ample for a shard and is what test:unit:ci:shard uses.
+          NODE_OPTIONS: "--max-old-space-size=12288"
 
   compat-tests:
     name: Node ${{ matrix.node }} Compat Tests (${{ matrix.shard }}/4)

@@ -166,6 +166,9 @@ test("findMissingArtifactPaths flags missing root runtime files in the tarball",
     "dist/tls-options.mjs",
     "dist/webdav-handler.mjs",
     "scripts/build/colocateOptionals.mjs",
+    // #7265: postinstall.mjs runs this unconditionally on install; its absence
+    // from the tarball must be reported, not tolerated.
+    "scripts/build/fixPlaywrightAndroid.mjs",
     "scripts/build/fixTlsClientNodeBinary.mjs",
     "scripts/build/native-binary-compat.mjs",
     "scripts/build/runtime-env.mjs",
