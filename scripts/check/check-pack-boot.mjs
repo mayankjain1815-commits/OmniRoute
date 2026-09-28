@@ -15,6 +15,7 @@
  */
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 
@@ -23,9 +24,9 @@ const BOOT_DEADLINE_MS = 240_000;
 const SQLJS_STARTUP_MARKER = "Pre-initializing sql.js WASM";
 
 export const REQUIRED_SQLJS_RUNTIME_FILES = Object.freeze([
-  "dist/node_modules/sql.js/package.json",
-  "dist/node_modules/sql.js/dist/sql-wasm.js",
-  "dist/node_modules/sql.js/dist/sql-wasm.wasm",
+  "package.json",
+  "dist/sql-wasm.js",
+  "dist/sql-wasm.wasm",
 ]);
 
 /** Parse `npm pack --json` output into the generated tarball filename. */
@@ -56,9 +57,45 @@ export function pickPort(seed = process.pid) {
   return 23000 + (seed % 4000);
 }
 
-export function findMissingSqlJsRuntimeFiles(packageRoot, exists = fs.existsSync) {
+/**
+ * Resolve the installed `sql.js` package directory the way the runtime itself does.
+ *
+ * The published tarball ships NO nested node_modules by design: package.json `files[]`
+ * carries a negation that excludes every nested node_modules tree, and
+ * PACK_ARTIFACT_NEVER_ALLOWED_SEGMENTS bans the `node_modules` segment outright
+ * (defence-in-depth against a documented 79 MB devDependency bloat under @omniroute/*).
+ * Because `sql.js` is a real `dependency`, `npm install -g` places it in the install
+ * prefix and the installed dist/server.js resolves it by walking up the node_modules
+ * chain. So the smoke must resolve it rather than assume a vendored path that npm is
+ * never going to ship.
+ *
+ * @param {string} packageRoot installed package root (…/lib/node_modules/omniroute)
+ * @param {{createRequireImpl?: Function, exists?: Function}} [deps] injectable for tests
+ * @returns {string} absolute path of the resolved sql.js package directory
+ */
+export function resolveSqlJsPackageDir(
+  packageRoot,
+  { createRequireImpl = createRequire, exists = fs.existsSync } = {}
+) {
+  // Anchor resolution at the installed dist/server.js — the same file the spawned CLI
+  // boots from, so this asserts the resolution the runtime will actually perform.
+  const requireFromDist = createRequireImpl(path.join(packageRoot, "dist", "server.js"));
+  // `main` points at <pkg>/dist/sql-wasm.js, so walk up to the directory owning
+  // package.json rather than assuming a fixed depth.
+  let dir = path.dirname(requireFromDist.resolve("sql.js"));
+  while (dir !== path.dirname(dir) && !exists(path.join(dir, "package.json"))) {
+    dir = path.dirname(dir);
+  }
+  return dir;
+}
+
+/**
+ * @param {string} sqlJsPackageDir directory returned by {@link resolveSqlJsPackageDir}
+ * @returns {string[]} required files missing from that directory
+ */
+export function findMissingSqlJsRuntimeFiles(sqlJsPackageDir, exists = fs.existsSync) {
   return REQUIRED_SQLJS_RUNTIME_FILES.filter(
-    (relativePath) => !exists(path.join(packageRoot, relativePath))
+    (relativePath) => !exists(path.join(sqlJsPackageDir, relativePath))
   );
 }
 
@@ -343,7 +380,21 @@ async function main() {
       maxBuffer: 64 * 1024 * 1024,
     });
     const packageRoot = path.join(prefix, "lib", "node_modules", "omniroute");
-    const missingSqlJsFiles = findMissingSqlJsRuntimeFiles(packageRoot);
+    // Resolve sql.js from the installed package instead of assuming a vendored
+    // dist/node_modules path — the tarball intentionally ships no nested node_modules
+    // (package.json `files[]` "!**/node_modules/**" + PACK_ARTIFACT_NEVER_ALLOWED_SEGMENTS),
+    // and `sql.js` is a real dependency npm installs into this prefix.
+    let sqlJsPackageDir;
+    try {
+      sqlJsPackageDir = resolveSqlJsPackageDir(packageRoot);
+    } catch (err) {
+      throw new Error(
+        `installed package cannot resolve sql.js from its own dist/server.js ` +
+          `(${packageRoot}): ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+    log(`sql.js resolves to ${sqlJsPackageDir}`);
+    const missingSqlJsFiles = findMissingSqlJsRuntimeFiles(sqlJsPackageDir);
     if (missingSqlJsFiles.length > 0) {
       throw new Error(
         `installed package is missing the sql.js runtime contract: ${missingSqlJsFiles.join(", ")}`
