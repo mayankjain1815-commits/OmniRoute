@@ -9,6 +9,7 @@ import {
   evaluateBoot,
   pickPort,
   findMissingSqlJsRuntimeFiles,
+  resolveSqlJsPackageDir,
   evaluateSqlJsRoundTrip,
   evaluateRestartPersistence,
 } from "../../scripts/check/check-pack-boot.mjs";
@@ -67,10 +68,85 @@ test("installed package contract requires sql.js metadata, entrypoint, and WASM"
     []
   );
 
-  present.delete(path.join("/pkg", "dist/node_modules/sql.js/dist/sql-wasm.wasm"));
+  present.delete(path.join("/pkg", "dist/sql-wasm.wasm"));
   assert.deepEqual(
     findMissingSqlJsRuntimeFiles("/pkg", (file) => present.has(file)),
-    ["dist/node_modules/sql.js/dist/sql-wasm.wasm"]
+    ["dist/sql-wasm.wasm"]
+  );
+});
+
+// ── #Package Artifact: the sql.js contract must be checked where sql.js actually resolves ──
+// The published tarball deliberately ships NO nested node_modules: package.json `files[]`
+// carries the "!**/node_modules/**" negation and PACK_ARTIFACT_NEVER_ALLOWED_SEGMENTS bans
+// the segment outright (defence-in-depth against a documented 79 MB devDependency bloat from
+// @omniroute/*). `sql.js` is a real `dependency`, so `npm install -g` installs it into the
+// prefix and the installed dist/server.js resolves it by walking up the node_modules chain.
+// Asserting a hardcoded `dist/node_modules/sql.js/...` path therefore failed the gate on a
+// perfectly good tarball — the vendored path npm is never going to ship.
+
+test("sql.js contract paths are relative to the resolved package, not a vendored node_modules", () => {
+  for (const rel of REQUIRED_SQLJS_RUNTIME_FILES) {
+    assert.ok(
+      !rel.includes("node_modules"),
+      `required sql.js file must not assume a vendored path npm strips: ${rel}`
+    );
+  }
+  assert.deepEqual(REQUIRED_SQLJS_RUNTIME_FILES, [
+    "package.json",
+    "dist/sql-wasm.js",
+    "dist/sql-wasm.wasm",
+  ]);
+});
+
+test("resolveSqlJsPackageDir resolves sql.js from the INSTALLED package's own dist/server.js", () => {
+  const sqlJsRoot = path.join("/prefix/lib/node_modules/omniroute", "node_modules", "sql.js");
+  const createRequireImpl = (from: string) => {
+    assert.equal(from, path.join("/prefix/lib/node_modules/omniroute", "dist", "server.js"));
+    return {
+      resolve: (id: string) => {
+        assert.equal(id, "sql.js");
+        // Real behaviour: `main` is <pkg>/dist/sql-wasm.js, not the package root.
+        return path.join(sqlJsRoot, "dist", "sql-wasm.js");
+      },
+    };
+  };
+  const exists = (p: string) => p === path.join(sqlJsRoot, "package.json");
+
+  assert.equal(
+    resolveSqlJsPackageDir("/prefix/lib/node_modules/omniroute", { createRequireImpl, exists }),
+    sqlJsRoot
+  );
+});
+
+test("findMissingSqlJsRuntimeFiles is checked against the RESOLVED sql.js directory", () => {
+  const resolved = "/prefix/lib/node_modules/omniroute/node_modules/sql.js";
+  const present = new Set(REQUIRED_SQLJS_RUNTIME_FILES.map((f) => path.join(resolved, f)));
+
+  assert.deepEqual(
+    findMissingSqlJsRuntimeFiles(resolved, (f) => present.has(f)),
+    []
+  );
+
+  present.delete(path.join(resolved, "dist/sql-wasm.wasm"));
+  assert.deepEqual(
+    findMissingSqlJsRuntimeFiles(resolved, (f) => present.has(f)),
+    ["dist/sql-wasm.wasm"]
+  );
+});
+
+test("source guard: the gate resolves sql.js instead of hardcoding a dist/node_modules path", () => {
+  const src = readFileSync(SCRIPT_PATH, "utf8");
+  assert.ok(
+    src.includes("resolveSqlJsPackageDir"),
+    "the smoke must resolve sql.js from the installed package, not assume a vendored path"
+  );
+  assert.ok(
+    !src.includes("dist/node_modules/sql.js"),
+    "must not hardcode dist/node_modules/sql.js — npm strips nested node_modules by design"
+  );
+  assert.ok(
+    src.includes("cannot resolve sql.js"),
+    "an unresolvable sql.js must fail loudly with its own message, not a confusing file list"
   );
 });
 
