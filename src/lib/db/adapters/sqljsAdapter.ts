@@ -14,8 +14,27 @@ function resolveSqlJsWasmPath(): string {
   // bundle directory, so the JavaScript entrypoint and its sibling WASM share one
   // explicit runtime contract instead of relying on a require.resolve call that
   // webpack can rewrite. The second path retains direct-source compatibility.
-  const candidatePaths = [
-    path.join(process.cwd(), "node_modules", "sql.js", "dist", "sql-wasm.wasm"),
+  //
+  // A single cwd-relative probe is not enough for the *installed* package: the
+  // published launcher runs with cwd=<pkg>/dist, while npm installs sql.js at
+  // <pkg>/node_modules/sql.js. Probing only cwd made the packaged CLI throw
+  // "Packaged sql.js runtime is incomplete" and answer HTTP 500 on /health.
+  // Walking up from cwd mirrors Node's own nearest-first module resolution and
+  // stays webpack-safe (no import.meta / __filename rewrite to depend on).
+  const wasmRelativePath = path.join("node_modules", "sql.js", "dist", "sql-wasm.wasm");
+  const candidatePaths: string[] = [];
+
+  let currentDir = process.cwd();
+  for (;;) {
+    candidatePaths.push(path.join(currentDir, wasmRelativePath));
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+    currentDir = parentDir;
+  }
+
+  candidatePaths.push(
     path.join(
       process.cwd(),
       ".next",
@@ -24,8 +43,8 @@ function resolveSqlJsWasmPath(): string {
       "sql.js",
       "dist",
       "sql-wasm.wasm"
-    ),
-  ];
+    )
+  );
 
   for (const candidatePath of candidatePaths) {
     if (fs.existsSync(candidatePath)) {
