@@ -47,9 +47,7 @@ export interface GetRadarCatalogDeps {
  * Convert the static `FreeModelBudget[]` into `MergedEntry[]` so the
  * merge function has a uniform input shape.
  */
-export function baselineToMergedEntries(
-  budgets: typeof FREE_MODEL_BUDGETS,
-): MergedEntry[] {
+export function baselineToMergedEntries(budgets: typeof FREE_MODEL_BUDGETS): MergedEntry[] {
   return budgets.map((b) => ({
     provider: b.provider,
     modelId: b.modelId,
@@ -131,4 +129,4 @@ export function getRadarCatalog(deps: GetRadarCatalogDeps = {}): RadarCatalogRes
 }
 
 // Re-export merge types for convenience
-export { applyFeed, type MergedEntry, type FeedModel } from "./applyFeed";
+export { type MergedEntry } from "./applyFeed";

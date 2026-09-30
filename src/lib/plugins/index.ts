@@ -17,28 +17,11 @@
  */
 
 // Re-export types from hooks.ts (canonical source)
-export type {
-  PluginContext,
-  PluginResult,
-  Plugin,
-  BlockingHookResult,
-  HookHandler,
-  HookRegistration,
-} from "./hooks.ts";
+export type { PluginContext, PluginResult, Plugin } from "./hooks.ts";
 
 // Re-export execution functions from hooks.ts
-export {
-  runOnRequest,
-  runOnResponse,
-  runOnError,
-  resetHooks as resetPlugins,
-  registerHook as registerPlugin,
-  unregisterHooks as unregisterPluginList,
-  getHooks as listPlugins,
-} from "./hooks.ts";
 
 // Backward compat: old code may import unregisterPlugin (singular)
-export { unregisterHooks as unregisterPlugin } from "./hooks.ts";
 
 import { getActiveEvents, getHooks, unregisterHooks } from "./hooks.ts";
 
@@ -57,9 +40,7 @@ import { getActiveEvents, getHooks, unregisterHooks } from "./hooks.ts";
  */
 export function setPluginEnabled(name: string, enabled: boolean): boolean {
   const hasHooks = (): boolean =>
-    getActiveEvents().some((event) =>
-      getHooks(event).some((h) => h.pluginName === name)
-    );
+    getActiveEvents().some((event) => getHooks(event).some((h) => h.pluginName === name));
   if (!enabled) {
     const existed = hasHooks();
     unregisterHooks(name);
@@ -69,4 +50,3 @@ export function setPluginEnabled(name: string, enabled: boolean): boolean {
 }
 
 // Re-export SDK utilities
-export { definePlugin, blockRequest, modifyBody, addMetadata } from "./sdk.ts";

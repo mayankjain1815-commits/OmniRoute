@@ -8,6 +8,7 @@
         "src/app/**/manifest.ts",
         "src/middleware.ts",
         "src/instrumentation.ts",
+        "src/lib/plugins/sdk.ts",
         "bin/**/*.{mjs,ts}",
         "scripts/**/*.{mjs,ts}",
         "electron/main.js",
