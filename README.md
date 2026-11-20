@@ -13,6 +13,18 @@
 
 <div align="center">
 
+[![Build](https://github.com/mayankjain1815-commits/OmniRoute/actions/workflows/build.yml/badge.svg)](https://github.com/mayankjain1815-commits/OmniRoute/actions/workflows/build.yml)
+[![Nightly Property Discovery](https://github.com/mayankjain1815-commits/OmniRoute/actions/workflows/nightly-property.yml/badge.svg)](https://github.com/mayankjain1815-commits/OmniRoute/actions/workflows/nightly-property.yml)
+[![Nightly Schemathesis](https://github.com/mayankjain1815-commits/OmniRoute/actions/workflows/nightly-schemathesis.yml/badge.svg)](https://github.com/mayankjain1815-commits/OmniRoute/actions/workflows/nightly-schemathesis.yml)
+[![License: MIT](https://img.shields.io/github/license/mayankjain1815-commits/OmniRoute)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/mayankjain1815-commits/OmniRoute)](https://github.com/mayankjain1815-commits/OmniRoute/stargazers)
+[![Forks](https://img.shields.io/github/forks/mayankjain1815-commits/OmniRoute)](https://github.com/mayankjain1815-commits/OmniRoute/forks)
+[![Contributors](https://img.shields.io/github/contributors/mayankjain1815-commits/OmniRoute)](https://github.com/mayankjain1815-commits/OmniRoute/graphs/contributors)
+
+</div>
+
+<div align="center">
+
 ## 💰 ~1.53B Free Tokens / Month
 
 </div>
@@ -35,7 +47,7 @@
 
 </h3>
 
-[![Stars](https://img.shields.io/github/stars/diegosouzapw/OmniRoute?style=social)](https://github.com/diegosouzapw/OmniRoute)
+[![Stars](https://img.shields.io/github/stars/mayankjain1815-commits/OmniRoute?style=social)](https://github.com/mayankjain1815-commits/OmniRoute)
 <a href="https://trendshift.io/repositories/23589" target="_blank"><img src="https://trendshift.io/api/badge/repositories/23589" alt="diegosouzapw%2FOmniRoute | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 [![Star History Rank](https://api.star-history.com/badge?repo=diegosouzapw/OmniRoute&theme=dark)](https://www.star-history.com/diegosouzapw/omniroute)
 
