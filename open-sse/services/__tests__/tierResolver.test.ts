@@ -192,12 +192,14 @@ describe("TierResolver", () => {
     });
 
     it("uses cache for repeated models", () => {
-      classifyTiers([
+      const results = classifyTiers([
         { provider: "openai", model: "gpt-4o" },
         { provider: "openai", model: "gpt-4o" },
       ]);
-      // If cache works, second call should be instant; test passes if no error
-      expect(true).toBe(true);
+
+      expect(results).toHaveLength(2);
+      expect(results[1]).toEqual(results[0]);
+      expect(getTierStats()[results[0].tier]).toBe(1);
     });
   });
 
