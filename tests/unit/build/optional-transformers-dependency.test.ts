@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const repoRoot = process.cwd();
@@ -101,4 +101,40 @@ test("package-lock marks transformers and its onnxruntime runtime as optional", 
   ]) {
     assert.equal(lock.packages[packagePath]?.optional, true, `${packagePath} should be optional`);
   }
+});
+
+test("production source never uses a build-time-resolved import of the optional dep", () => {
+  // A literal dynamic import is still resolved statically by tsc and webpack.
+  // When CI installs without optional deps that produces TS2307 and a webpack
+  // "Module not found", breaking typecheck and the Node 24/26 build matrix.
+  const literalImport = /(?:\bimport\s*\(|\bfrom\s*)["']@huggingface\/transformers["']/;
+  const sourceExt = /\.(?:ts|tsx|mts|cts)$/;
+  const offenders: string[] = [];
+
+  function walk(dir: string): void {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === "__tests__" || entry.name === "tests") {
+        continue;
+      }
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (
+        entry.isFile() &&
+        sourceExt.test(entry.name) &&
+        literalImport.test(readFileSync(full, "utf8"))
+      ) {
+        offenders.push(full);
+      }
+    }
+  }
+
+  // These trees hold every production module that reaches the Next build.
+  for (const root of ["src", "open-sse"]) walk(join(repoRoot, root));
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `optional dep must be loaded through a runtime-variable import, found literal import in: ${offenders.join(", ")}`
+  );
 });
