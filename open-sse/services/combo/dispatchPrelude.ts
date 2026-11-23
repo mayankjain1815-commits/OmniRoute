@@ -32,6 +32,7 @@ import {
   rrCounters,
 } from "./rrState.ts";
 import { executeRuntimeUnitCombo } from "./runtimeUnits.ts";
+import { isComboModelVisible } from "./comboVisibility.ts";
 import {
   releaseQualityClone,
   releaseRejectedQualityResponse,
@@ -340,12 +341,30 @@ export async function tryFusionDispatch(args: {
   runCombo: RunCombo;
 }): Promise<Response | null> {
   const { cfg, combo, config, strategy, log } = args;
-  const judgeModel = typeof cfg.judgeModel === "string" ? cfg.judgeModel : undefined;
+  const rawJudgeModel = typeof cfg.judgeModel === "string" ? cfg.judgeModel : undefined;
+  // A hidden model is not user-callable, so it must not be dispatched as the fusion
+  // judge either. Panel members already go through
+  // resolveComboTargets(.., hiddenModelsByProvider), which drops them; an explicit
+  // config.judgeModel used to bypass that filter completely, so an operator-hidden
+  // judge was still called — and it also became the dispatch target for every
+  // tool-bearing request, which skips panel synthesis. Fall back to the
+  // panel-derived judge (panel[0], or the first survivor) instead.
+  const judgeModel =
+    rawJudgeModel &&
+    isComboModelVisible(rawJudgeModel, null, args.hiddenModelsByProvider ?? undefined)
+      ? rawJudgeModel
+      : undefined;
+  if (rawJudgeModel && !judgeModel) {
+    log.warn(
+      "COMBO",
+      `Combo "${combo.name}" sets config.judgeModel "${rawJudgeModel}", but that model is hidden — ignoring it and judging with a visible panel member`
+    );
+  }
   const fusionTuning =
     cfg.fusionTuning && typeof cfg.fusionTuning === "object"
       ? (cfg.fusionTuning as FusionTuning)
       : undefined;
-  if (strategy !== "fusion" && (judgeModel || fusionTuning)) {
+  if (strategy !== "fusion" && (rawJudgeModel || fusionTuning)) {
     log.warn(
       "COMBO",
       `Combo "${combo.name}" sets config.judgeModel/fusionTuning but strategy is "${strategy}" — these fields are only consumed by the fusion strategy and will be ignored (#6455)`
@@ -353,16 +372,24 @@ export async function tryFusionDispatch(args: {
   }
   if (strategy !== "fusion") return null;
 
-  const { panel: fusionModels, comboRefUnits } = extractFusionPanelSpec(
-    resolveComboTargets(
-      combo,
-      args.allCombos,
-      clampComboDepth(config.maxComboDepth),
-      args.hiddenModelsByProvider
-    ).map((target) => target.modelStr),
-    combo.name,
-    null
+  // Keep the resolved targets: they carry providerId / connectionId /
+  // allowedConnectionIds / pinnedFingerprint. Handing fusion.ts bare model
+  // strings dropped all of that, so a structured panel entry with an explicit
+  // providerId was silently re-resolved from the model prefix and dispatched to
+  // the wrong provider.
+  const resolvedFusionTargets = resolveComboTargets(
+    combo,
+    args.allCombos,
+    clampComboDepth(config.maxComboDepth),
+    args.hiddenModelsByProvider
   );
+  const { panel, panelTargets, comboRefUnits } = extractFusionPanelSpec(
+    resolvedFusionTargets.map((target) => target.modelStr),
+    combo.name,
+    null,
+    resolvedFusionTargets
+  );
+  const fusionModels = panel.map((modelStr, index) => panelTargets[index] ?? modelStr);
   // Untyped like the existing `nestingContext` further down — `nesting` is
   // already `ComboNestingContext | null` per HandleComboChatOptions, no new
   // import needed.

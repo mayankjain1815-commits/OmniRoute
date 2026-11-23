@@ -21,9 +21,42 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { callVisionModel, type VisionModelConfig } from "@/lib/guardrails/visionBridgeHelpers";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { VisionModelConfig } from "@/lib/guardrails/visionBridgeHelpers";
+
+// These tests drive callVisionModel against a mocked fetch, but #8430 made
+// getBestVisionModel() validate the configured fixedModel against real
+// credentials first (an unreachable fixedModel must not short-circuit the
+// credential check) and throw a clear error when nothing is connected. Without
+// a seeded connection the whole file died on "No vision-capable provider
+// connected" before ever reaching the request-shape / response-parsing
+// assertions it exists to make. Isolated DATA_DIR + one credentialed
+// connection for the `cmd` provider keeps the subject here independent of that
+// credential-filtering behavior — same pattern as
+// vision-bridge-callmodel.test.ts, which hit the same wall in #8433.
+const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-vision-bridge-sse-"));
+process.env.DATA_DIR = TEST_DATA_DIR;
+process.env.VISION_BRIDGE_ENABLED = "false";
+
+const { callVisionModel } = await import("@/lib/guardrails/visionBridgeHelpers");
+const { createProviderConnection } = await import("../../../src/lib/db/providers.ts");
+
+await createProviderConnection({
+  provider: "cmd",
+  authType: "apikey",
+  name: "vision-bridge-sse-test",
+  apiKey: "sk-test-cmd-vision",
+  isActive: true,
+});
 
 const originalFetch = globalThis.fetch;
+
+test.after(() => {
+  globalThis.fetch = originalFetch;
+  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+});
 
 function baseConfig(overrides: Partial<VisionModelConfig> = {}): VisionModelConfig {
   return {

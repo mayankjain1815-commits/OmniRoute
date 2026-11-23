@@ -165,11 +165,15 @@ test("filesystem proof: cp under umask 0077 creates mode 0600 (why the fix is ne
 
   const oldUmask = process.umask(0o077);
   try {
-    // Use the real `cp` (GNU coreutils) by absolute path — the exact command
-    // installCertLinux runs — so the umask actually applies. Node's
-    // fs.copyFileSync preserves the source mode, which would mask the bug, and
-    // the bare `cp` on PATH below is a logging stub from the install tests.
-    execFileSync("/usr/bin/cp", [src, dst]);
+    // Use the real `cp` by absolute path — the exact command installCertLinux
+    // runs — so the umask actually applies. Node's fs.copyFileSync preserves
+    // the source mode, which would mask the bug, and the bare `cp` on PATH below
+    // is a logging stub from the install tests. Resolved across both install
+    // locations: GNU coreutils puts it in /usr/bin, macOS/BSD in /bin.
+    const CP_CANDIDATES = ["/usr/bin/cp", "/bin/cp"];
+    const cpPath = CP_CANDIDATES.find((p) => fs.existsSync(p));
+    assert.ok(cpPath, `no real cp found in ${CP_CANDIDATES.join(" or ")}`);
+    execFileSync(cpPath, [src, dst]);
     const mode = fs.statSync(dst).mode & 0o777;
     assert.equal(mode, 0o600, "cp under umask 0077 must produce 0600 — the bug this fix repairs");
   } finally {
