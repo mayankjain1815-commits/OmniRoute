@@ -29,6 +29,10 @@ test.afterEach(() => {
 test("runtime env helpers normalize runtime ports and conflicting color flags", async () => {
   const runtimeEnv = await loadRuntimeEnv("helpers");
 
+  // withRuntimePortEnv() also pins HOSTNAME so the spawned server binds on every
+  // interface (0.0.0.0), overridable via OMNIROUTE_HOSTNAME. Without it Node
+  // resolves HOSTNAME from the machine and the CLI/launcher can come up
+  // unreachable. Asserted here because it is part of the function's contract.
   assert.deepEqual(
     runtimeEnv.withRuntimePortEnv(
       { NODE_ENV: "test" },
@@ -40,6 +44,24 @@ test("runtime env helpers normalize runtime ports and conflicting color flags", 
       PORT: "22128",
       DASHBOARD_PORT: "22128",
       API_PORT: "21128",
+      HOSTNAME: "0.0.0.0",
+    }
+  );
+
+  // An explicit OMNIROUTE_HOSTNAME must win over the 0.0.0.0 default.
+  assert.deepEqual(
+    runtimeEnv.withRuntimePortEnv(
+      { NODE_ENV: "test", OMNIROUTE_HOSTNAME: "127.0.0.1" },
+      { basePort: 20128, apiPort: 21128, dashboardPort: 22128 }
+    ),
+    {
+      NODE_ENV: "test",
+      OMNIROUTE_HOSTNAME: "127.0.0.1",
+      OMNIROUTE_PORT: "20128",
+      PORT: "22128",
+      DASHBOARD_PORT: "22128",
+      API_PORT: "21128",
+      HOSTNAME: "127.0.0.1",
     }
   );
 

@@ -18,11 +18,25 @@ import type {
   HandleComboChatOptions,
   HandleSingleModel,
   ResolvedComboRefTarget,
+  ResolvedComboTarget,
 } from "./types.ts";
 
 export type FusionPanelSpec = {
   /** Dispatch keys handed to fusion.ts's `models` — comboName for combo-ref members, plain model string otherwise. */
   panel: string[];
+  /**
+   * Index-aligned with `panel`: the resolved combo target each entry came from, or
+   * `null` when the entry is a combo-ref (which dispatches as a black box and has
+   * no single resolved target) or when no target list was supplied.
+   *
+   * Callers that have already run `resolveComboTargets` MUST pass them here. The
+   * resolved target is what carries `providerId`, `connectionId`,
+   * `allowedConnectionIds` and `pinnedFingerprint`; handing fusion.ts only
+   * `modelStr` silently drops the operator's explicit provider/account pinning and
+   * lets the executor re-derive a provider from the model prefix (#fusion
+   * structured-target regression).
+   */
+  panelTargets: Array<ResolvedComboTarget | null>;
   /** comboName -> resolved combo-ref unit, consumed by buildFusionHandleSingleModel. */
   comboRefUnits: Map<string, ResolvedComboRefTarget>;
 };
@@ -30,9 +44,11 @@ export type FusionPanelSpec = {
 export function extractFusionPanelSpec(
   models: unknown[],
   comboName: string,
-  allCombos: ComboCollectionLike
+  allCombos: ComboCollectionLike,
+  resolvedTargets?: readonly ResolvedComboTarget[] | null
 ): FusionPanelSpec {
   const panel: string[] = [];
+  const panelTargets: Array<ResolvedComboTarget | null> = [];
   const comboRefUnits = new Map<string, ResolvedComboRefTarget>();
   models.forEach((entry, index) => {
     const step = normalizeComboStep(entry, { comboName, index, allCombos });
@@ -49,11 +65,15 @@ export function extractFusionPanelSpec(
         });
       }
       panel.push(step.comboName);
+      // A combo-ref fans out through its own recursive handleComboChat call, so
+      // there is no single resolved target to hand down here.
+      panelTargets.push(null);
       return;
     }
     panel.push(step.model);
+    panelTargets.push(resolvedTargets?.[index] ?? null);
   });
-  return { panel, comboRefUnits };
+  return { panel, panelTargets, comboRefUnits };
 }
 
 export function buildFusionHandleSingleModel(args: {
