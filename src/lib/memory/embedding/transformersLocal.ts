@@ -23,13 +23,30 @@ export function _injectPipeline(fn: PipelineFn | null): void {
   _pipelineLoading = null;
 }
 
+/**
+ * Import an OPTIONAL dependency without making it a build-time requirement.
+ *
+ * `@huggingface/transformers` is declared under `optionalDependencies` so a
+ * failed onnxruntime-node install cannot abort `npm install`. A literal dynamic
+ * import of that specifier is still resolved by both `tsc` (TS2307) and webpack
+ * at build time, so every check/CI job that installs with optional
+ * deps omitted fails before this code ever runs. Routing the specifier through
+ * a runtime variable — the same indirection `onnxWorker.ts` already uses —
+ * keeps the module type-checkable and keeps webpack out of it entirely. At
+ * runtime a missing package is a normal import rejection, already converted to
+ * `EmbeddingError{reason:model_load_failed}` below.
+ */
+function importOptionalModule(specifier: string): Promise<unknown> {
+  return import(/* webpackIgnore: true, @vite-ignore */ specifier);
+}
+
 async function getOrLoadPipeline(): Promise<PipelineFn> {
   if (_pipeline) return _pipeline;
   if (_pipelineLoading) return _pipelineLoading;
 
   _pipelineLoading = (async (): Promise<PipelineFn> => {
     // Lazy import — never at module level (D8, D25)
-    const transformers = await import("@huggingface/transformers");
+    const transformers = await importOptionalModule("@huggingface/transformers");
     const { pipeline } = transformers as { pipeline: (task: string, model: string, opts?: Record<string, unknown>) => Promise<PipelineFn> };
     const pipe = await pipeline("feature-extraction", TRANSFORMERS_MODEL, { dtype: "q8" });
     _pipeline = pipe;

@@ -30,13 +30,15 @@ const {
   isControlPlaneProxyDirectFallbackEnabled,
 } = await import("../../src/shared/utils/featureFlags.ts");
 
-const EXPECTED_FEATURE_FLAG_COUNT = 44;
+// Ratchet: a flag being added or removed is a deliberate, reviewable change —
+// bump this in the same PR. 45th flag: ARENA_ELO_SYNC_ENABLED.
+const EXPECTED_FEATURE_FLAG_COUNT = 45;
 
 // ──────────────────────────────────────────────────────
 // Test group 1 — Flag definitions registry
 // ──────────────────────────────────────────────────────
 describe("featureFlagDefinitions", () => {
-  it("has exactly 44 flag definitions", () => {
+  it("has exactly 45 flag definitions", () => {
     assert.strictEqual(FEATURE_FLAG_DEFINITIONS.length, EXPECTED_FEATURE_FLAG_COUNT);
   });
 

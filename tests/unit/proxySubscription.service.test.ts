@@ -34,7 +34,19 @@ function insertSubscription(
   ).run(
     id,
     `sub-${id}`,
-    `https://example.com/${id}`,
+    // A PUBLIC IP LITERAL on purpose, not a hostname. doSafeFetch() runs the
+    // SSRF guard BEFORE calling fetch(), and for a hostname that guard does a
+    // real `dns.lookup` — so this file used to depend on live DNS for
+    // example.com. The per-test fetch stub could never take effect (the guard
+    // ran first), syncSubscription always failed, updateSubscription dropped
+    // the global binding and never re-applied the pool, and the test asserted
+    // against that broken state — 91s of DNS timeouts and retries per run.
+    // An IP literal is checked structurally and skips DNS, so the stubbed
+    // fetch is actually reached and the test measures the re-bind behavior it
+    // was written for. 203.0.113.0/24 is RFC 5737's documentation range: not
+    // private/loopback/link-local (so the guard permits it) and never dialed,
+    // because fetch is stubbed.
+    `http://203.0.113.10/${id}`,
     opts.enabled === false ? 0 : 1,
     mode,
     opts.ruleProviders ? JSON.stringify(opts.ruleProviders) : null,
@@ -170,7 +182,9 @@ test("deleteSubscription unbinds and removes its proxy rows", async () => {
   assert.equal(rows.length, 0, "subscription proxy rows should be removed");
 
   const assignments = db
-    .prepare("SELECT 1 FROM proxy_assignments a JOIN proxy_registry p ON p.id=a.proxy_id WHERE p.source='subscription' LIMIT 1")
+    .prepare(
+      "SELECT 1 FROM proxy_assignments a JOIN proxy_registry p ON p.id=a.proxy_id WHERE p.source='subscription' LIMIT 1"
+    )
     .get();
   assert.equal(assignments, undefined, "no subscription proxy should remain assigned");
 
