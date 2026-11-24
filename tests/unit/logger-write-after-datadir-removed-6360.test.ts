@@ -46,6 +46,16 @@ function flushLogger(): Promise<void> {
   });
 }
 
+// The pino file transport is a worker-thread stream: it creates
+// logs/application/app.log asynchronously and can add an entry while rmSync is
+// walking the temp tree under CI load, yielding a transient ENOTEMPTY. Node's
+// rmSync already retries ENOTEMPTY when maxRetries is set, so use that rather
+// than swallowing the error — a genuinely stuck removal must still fail the test.
+function removeLoggerDirSync(): void {
+  if (!existsSync(dir)) return;
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 25 });
+}
+
 test("logger's file transport stream carries an error listener (never an unhandled worker error)", () => {
   const stream = (logger as unknown as Record<symbol, unknown>)[pino.symbols.streamSym] as {
     listenerCount(event: string): number;
@@ -70,7 +80,7 @@ test("logger must not crash the process when its worker transport reports a writ
 
     // Simulate the teardown every test file already does: rip out DATA_DIR
     // while the logger's worker-thread transport is still alive.
-    rmSync(dir, { recursive: true, force: true });
+    removeLoggerDirSync();
     assert.equal(existsSync(dir), false, "sanity: DATA_DIR must actually be gone");
 
     // Simulate the worker thread reporting the resulting write failure back to
@@ -103,7 +113,5 @@ test("logger must not crash the process when its worker transport reports a writ
 
 test.after(async () => {
   await flushLogger();
-  if (existsSync(dir)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  removeLoggerDirSync();
 });
